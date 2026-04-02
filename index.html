@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light only">
+  <title>Vardiya Planlama Takvimi</title>
+  <style>
+    :root {
+      --bg-a: #fef3c7;
+      --bg-b: #dbeafe;
+      --panel: #ffffff;
+      --ink: #0f172a;
+      --muted: #475569;
+      --line: #e2e8f0;
+      --a: #fef3c7;
+      --b: #dbeafe;
+      --c: #f3e8ff;
+      --off: #dcfce7;
+      --btn: #2563eb;
+      --btn2: #dc2626;
+      --warn: #fef2f2;
+    }
+
+    html {
+      color-scheme: light only;
+      background: linear-gradient(135deg, var(--bg-a), var(--bg-b));
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Manrope", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background-color: #f8fafc;
+      background:
+        radial-gradient(circle at 5% 10%, rgba(37, 99, 235, 0.15), transparent 40%),
+        radial-gradient(circle at 95% 5%, rgba(239, 68, 68, 0.12), transparent 35%),
+        linear-gradient(135deg, var(--bg-a), var(--bg-b));
+      padding: 18px;
+    }
+
+    .container { max-width: 1260px; margin: 0 auto; display: grid; gap: 12px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+    }
+
+    h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: -0.03em; }
+    h3 { margin: 0 0 10px; }
+    .sub { color: var(--muted); margin: 0; font-size: 14px; }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(130px, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+
+    .person-form {
+      display: grid;
+      grid-template-columns: 120px 1fr 180px 220px 150px;
+      gap: 10px;
+      align-items: end;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+
+    input, select, button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 9px 10px;
+      font-size: 14px;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .btn { border: none; color: #fff; font-weight: 800; cursor: pointer; }
+    .btn.run { background: var(--btn); }
+    .btn.reset { background: var(--btn2); }
+
+    .person-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    .person-table th, .person-table td {
+      border: 1px solid var(--line);
+      padding: 7px 8px;
+      text-align: left;
+    }
+    .person-table th { background: #f8fafc; }
+    .mini-btn {
+      width: auto;
+      padding: 5px 8px;
+      font-size: 12px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      color: #fff;
+      margin-right: 6px;
+    }
+    .mini-edit { background: #0ea5e9; }
+    .mini-del { background: #ef4444; }
+    .section-toggle {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-weight: 800;
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+    .collapsed { display: none; }
+
+    .rules { display: grid; gap: 6px; font-size: 14px; }
+    .rule {
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      padding: 7px 10px;
+      background: #fafcff;
+    }
+
+    .warning {
+      background: var(--warn);
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 700;
+      background: #fff;
+    }
+
+    .calendar-head, .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+    }
+    .calendar-head {
+      margin-bottom: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .day {
+      min-height: 128px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 7px;
+      display: grid;
+      grid-template-rows: auto auto auto auto;
+      gap: 5px;
+      background: #fff;
+    }
+    .day.empty { border-style: dashed; background: #f8fafc; }
+    .day .d { font-size: 13px; font-weight: 800; }
+
+    .row {
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      width: fit-content;
+      font-weight: 800;
+    }
+    .a { background: var(--a); }
+    .b { background: var(--b); }
+    .c { background: var(--c); }
+    .off { background: var(--off); }
+
+    .names {
+      font-size: 11px;
+      line-height: 1.35;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 5px 6px;
+      background: #f8fafc;
+    }
+
+    .hours-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 8px;
+    }
+
+    .export-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 8px;
+    }
+
+    .export-wrap {
+      overflow-x: auto;
+    }
+
+    @media (max-width: 930px) {
+      .controls { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .person-form { grid-template-columns: 1fr; }
+      .day { min-height: 142px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <section class="panel">
+      <h1>Vardiya Hesaplama Takvimi</h1>
+      <p class="sub">Personel bilgilerini gir, tipi sec; vardiyalar isimlere gore otomatik hesaplanir.</p>
+    </section>
+
+    <section class="panel">
+      <div class="controls">
+        <div>
+          <label for="year">Yil</label>
+          <input id="year" type="number" min="2020" max="2100">
+        </div>
+        <div>
+          <label for="month">Ay</label>
+          <input id="month" type="number" min="1" max="12">
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="runBtn" class="btn run" type="button">Hesapla</button>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="resetBtn" class="btn reset" type="button">Sifirla</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <button id="personToggleBtn" class="section-toggle" type="button">Personel Tanimlama (Gizle/Goster)</button>
+      <div id="personSectionBody">
+      <div class="person-form">
+        <div>
+          <label for="gender">Cinsiyet</label>
+          <select id="gender">
+            <option value="E">Erkek</option>
+            <option value="K">Kadin</option>
+          </select>
+        </div>
+        <div>
+          <label for="fullName">Isim Soyad</label>
+          <input id="fullName" type="text" placeholder="Orn: Ali Yilmaz">
+        </div>
+        <div>
+          <label for="personType">Tip</label>
+          <select id="personType">
+            <option value="normal">Normal</option>
+            <option value="sef">Sef</option>
+            <option value="gececi">Gececi</option>
+            <option value="yedek_gececi">Yedek Gececi</option>
+          </select>
+        </div>
+        <div>
+          <label for="leaveMode">Izin Modeli</label>
+          <select id="leaveMode">
+            <option value="telafi">Hafta Sonu Donusum + Hafta Ici 2 Telafi</option>
+            <option value="weekend_only">2 Haftada 1 Hafta Sonu</option>
+            <option value="none">Izin Kullanma</option>
+          </select>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="savePersonBtn" class="btn run" type="button">Ekle/Guncelle</button>
+        </div>
+      </div>
+      <table class="person-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Cinsiyet</th>
+            <th>Isim Soyad</th>
+            <th>Tip</th>
+            <th>Izin Modeli</th>
+            <th>Islem</th>
+          </tr>
+        </thead>
+        <tbody id="personTableBody"></tbody>
+      </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="rules">
+        <div class="rule"><strong>1)</strong> A: 08:00-16:00, B: 16:00-00:00, C: 00:00-08:00.</div>
+        <div class="rule"><strong>2)</strong> Sef sadece hafta ici A vardiyasinda calisir; her hafta sonu izinlidir.</div>
+        <div class="rule"><strong>3)</strong> Gececi 1 kisidir; 6 gun calisir, 2 gun izin yapar. Hedef: hafta ici A=8, B=7, C=1; hafta sonu A=3, B=3, C=1.</div>
+        <div class="rule"><strong>4)</strong> Yedek gececi normalde A grubunda sabittir. Gececi izne ciktiginda 2 gece C vardiyasini devralir ve sonrasinda +1 gun izin yapar.</div>
+        <div class="rule"><strong>5)</strong> Normal personel haftalik A/B doner. Izin modeli kisi bazlidir: hafta sonu donusumlu + hafta ici 2 telafi, sadece 2 haftada 1 hafta sonu, ya da izin kullanmama.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div id="warnings"></div>
+      <div id="stats" class="stats"></div>
+    </section>
+
+    <section class="panel">
+      <div class="calendar-head">
+        <div>Pzt</div><div>Sal</div><div>Car</div><div>Per</div><div>Cum</div><div>Cmt</div><div>Paz</div>
+      </div>
+      <div id="calendar" class="calendar-grid"></div>
+    </section>
+
+    <section class="panel">
+      <div class="export-actions">
+        <button id="exportBtn" class="btn run" type="button" style="width:auto;padding:8px 14px;">Excel'e Aktar</button>
+      </div>
+      <div class="export-wrap">
+        <table id="exportTable" class="person-table">
+          <thead>
+            <tr>
+              <th>Tarih</th>
+              <th>Gun</th>
+              <th>A Vardiyasi (08-16)</th>
+              <th>B Vardiyasi (16-00)</th>
+              <th>C Vardiyasi (00-08)</th>
+              <th>Izinliler</th>
+            </tr>
+          </thead>
+          <tbody id="exportTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Kisi Bazli Toplam Mesai</h3>
+      <div id="personHours" class="hours-grid"></div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
