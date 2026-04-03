@@ -41,6 +41,11 @@
       padding: 18px;
     }
 
+    * {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
     .container { max-width: 1260px; margin: 0 auto; display: grid; gap: 12px; }
     .panel {
       background: var(--panel);
@@ -56,7 +61,7 @@
 
     .controls {
       display: grid;
-      grid-template-columns: repeat(4, minmax(130px, 1fr));
+      grid-template-columns: repeat(2, minmax(160px, 1fr));
       gap: 10px;
       align-items: end;
     }
@@ -102,6 +107,15 @@
       text-align: left;
     }
     .person-table th { background: #f8fafc; }
+    .person-summary-row {
+      cursor: pointer;
+    }
+    .person-summary-row:hover {
+      background: #f8fafc;
+    }
+    .person-summary-row.active {
+      background: #eff6ff;
+    }
     .mini-btn {
       width: auto;
       padding: 5px 8px;
@@ -135,6 +149,35 @@
       padding: 7px 10px;
       background: #fafcff;
     }
+    .rule-title {
+      margin: 8px 0 2px;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--muted);
+    }
+    .leave-info-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 2px;
+    }
+    .leave-info-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+    .leave-info-card strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+    .leave-info-card span {
+      display: block;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
 
     .warning {
       background: var(--warn);
@@ -147,9 +190,40 @@
     }
 
     .stats {
+      display: none;
+    }
+    .focus-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fffdf5;
+    }
+    .focus-bar.active {
       display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+    }
+    .focus-text {
+      font-size: 13px;
+      color: var(--ink);
+      font-weight: 700;
+    }
+    .focus-text span {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .focus-clear {
+      width: auto;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+      font-weight: 700;
+      cursor: pointer;
     }
     .pill {
       padding: 6px 10px;
@@ -183,6 +257,19 @@
       background: #fff;
     }
     .day.empty { border-style: dashed; background: #f8fafc; }
+    .day.weekend-day { background: linear-gradient(180deg, #fff8e1 0%, #ffffff 70%); }
+    .day.filtered-out {
+      opacity: 0.35;
+      transform: scale(0.985);
+    }
+    .day.focus-work {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
+    }
+    .day.focus-off {
+      border-color: #16a34a;
+      box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.14);
+    }
     .day .d { font-size: 13px; font-weight: 800; }
 
     .row {
@@ -205,15 +292,26 @@
       padding: 5px 6px;
       background: #f8fafc;
     }
+    .focus-name {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-weight: 800;
+      background: #fde68a;
+      color: #92400e;
+    }
+    .focus-name.off {
+      background: #bbf7d0;
+      color: #166534;
+    }
 
-    .hours-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-      gap: 8px;
+    .hours-wrap {
+      overflow-x: auto;
     }
 
     .export-actions {
       display: flex;
+      gap: 8px;
       justify-content: flex-end;
       margin-bottom: 8px;
     }
@@ -221,22 +319,221 @@
     .export-wrap {
       overflow-x: auto;
     }
+    .visually-hidden-export {
+      display: none;
+    }
+
+    .print-title {
+      display: none;
+      margin-bottom: 12px;
+    }
+
+    .print-calendar-table {
+      display: none;
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 3px;
+      table-layout: fixed;
+    }
+
+    .print-calendar-table th,
+    .print-calendar-table td {
+      vertical-align: top;
+    }
+
+    .print-calendar-table th {
+      text-align: left;
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      padding: 0 2px 4px;
+    }
+
+    .print-calendar-table td.weekend-cell,
+    .print-calendar-table th.weekend-head {
+      background: rgba(251, 191, 36, 0.08);
+    }
+
+    @media print {
+      @page {
+        size: landscape;
+        margin: 7mm;
+      }
+
+      html,
+      body {
+        height: auto;
+        min-height: 0;
+        background: #fff !important;
+      }
+
+      body {
+        padding: 0;
+        font-size: 11px;
+        display: block;
+      }
+
+      .panel {
+        box-shadow: none;
+        border-color: #cbd5e1;
+        background: #fff;
+      }
+
+      .print-hide {
+        display: none !important;
+      }
+
+      .print-only {
+        display: block !important;
+      }
+
+      .screen-calendar {
+        display: none !important;
+      }
+
+      .print-calendar-table {
+        display: table;
+      }
+
+      .printable-calendar {
+        display: block !important;
+        border: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .print-title {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .print-title h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .container {
+        max-width: none;
+        gap: 0;
+        display: block;
+      }
+
+      .print-summary {
+        margin-top: 10px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      .print-summary h3 {
+        margin: 0 0 6px;
+        font-size: 14px;
+      }
+
+      .print-summary .person-table {
+        margin-top: 0;
+        font-size: 10px;
+      }
+
+      .print-summary .person-table th,
+      .print-summary .person-table td {
+        padding: 4px 5px;
+      }
+
+      .print-calendar-table thead {
+        display: table-header-group;
+      }
+
+      .print-calendar-table tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      .print-calendar-table th {
+        color: #334155 !important;
+        font-size: 10px;
+        letter-spacing: 0;
+        padding: 0 2px 4px;
+      }
+
+      .print-calendar-table td {
+        padding: 0;
+      }
+
+      .day {
+        min-height: 142px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+        background: #fff !important;
+        border-color: #cbd5e1 !important;
+        border-radius: 8px;
+        padding: 5px;
+        gap: 3px;
+      }
+
+      .day .d {
+        font-size: 11px;
+      }
+
+      .day.empty {
+        background: #f8fafc !important;
+      }
+
+      .row {
+        padding: 2px 6px;
+        font-size: 10px;
+        border-radius: 999px;
+      }
+
+      .row.a {
+        background: var(--a) !important;
+      }
+
+      .row.b {
+        background: var(--b) !important;
+      }
+
+      .row.c {
+        background: var(--c) !important;
+      }
+
+      .row.off {
+        background: var(--off) !important;
+      }
+
+      .names {
+        background: #f8fafc !important;
+        border-color: #cbd5e1 !important;
+        font-size: 9px;
+        line-height: 1.25;
+        padding: 4px 5px;
+        border-radius: 7px;
+      }
+
+      button {
+        display: none !important;
+      }
+    }
+
+    .print-only {
+      display: none;
+    }
 
     @media (max-width: 930px) {
-      .controls { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .controls { grid-template-columns: 1fr; }
       .person-form { grid-template-columns: 1fr; }
       .day { min-height: 142px; }
+      .leave-info-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <section class="panel">
+    <section class="panel print-hide">
       <h1>Vardiya Hesaplama Takvimi</h1>
       <p class="sub">Personel bilgilerini gir, tipi sec; vardiyalar isimlere gore otomatik hesaplanir.</p>
     </section>
 
-    <section class="panel">
+    <section class="panel print-hide">
       <div class="controls">
         <div>
           <label for="year">Yil</label>
@@ -246,18 +543,10 @@
           <label for="month">Ay</label>
           <input id="month" type="number" min="1" max="12">
         </div>
-        <div>
-          <label>&nbsp;</label>
-          <button id="runBtn" class="btn run" type="button">Hesapla</button>
-        </div>
-        <div>
-          <label>&nbsp;</label>
-          <button id="resetBtn" class="btn reset" type="button">Sifirla</button>
-        </div>
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel print-hide">
       <button id="personToggleBtn" class="section-toggle" type="button">Personel Tanimlama (Gizle/Goster)</button>
       <div id="personSectionBody">
       <div class="person-form">
@@ -310,33 +599,88 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel print-hide">
+      <button id="rulesToggleBtn" class="section-toggle" type="button">Hesaplama Mantigi (Gizle/Goster)</button>
+      <div id="rulesSectionBody">
       <div class="rules">
-        <div class="rule"><strong>1)</strong> A: 08:00-16:00, B: 16:00-00:00, C: 00:00-08:00.</div>
-        <div class="rule"><strong>2)</strong> Sef sadece hafta ici A vardiyasinda calisir; her hafta sonu izinlidir.</div>
-        <div class="rule"><strong>3)</strong> Gececi 1 kisidir; 6 gun calisir, 2 gun izin yapar. Hedef: hafta ici A=8, B=7, C=1; hafta sonu A=3, B=3, C=1.</div>
-        <div class="rule"><strong>4)</strong> Yedek gececi normalde A grubunda sabittir. Gececi izne ciktiginda 2 gece C vardiyasini devralir ve sonrasinda +1 gun izin yapar.</div>
-        <div class="rule"><strong>5)</strong> Normal personel haftalik A/B doner. Izin modeli kisi bazlidir: hafta sonu donusumlu + hafta ici 2 telafi, sadece 2 haftada 1 hafta sonu, ya da izin kullanmama.</div>
+        <div class="rule"><strong>Vardiyalar:</strong> A 08:00-16:00, B 16:00-00:00, C 00:00-08:00.</div>
+        <div class="rule"><strong>Sef:</strong> Sadece hafta ici A vardiyasinda calisir. Hafta sonu izinlidir.</div>
+        <div class="rule"><strong>Gececi:</strong> 6 gun calisir, 2 gun izin yapar. C vardiyasi her gun 1 kisidir.</div>
+        <div class="rule"><strong>Yedek gececi:</strong> Normalde A vardiyasindadir. Gececi yerine 2 gece nobet tuttugunda ertesi gun izin yapar.</div>
+        <div class="rule"><strong>Dagitim:</strong> Normal personel haftalik A/B doner. Izin modeli kisi bazli uygulanir ve ayni modelde denge korunur.</div>
+        <div class="rule-title">Izin Modelleri</div>
+        <div class="leave-info-grid">
+          <div class="leave-info-card">
+            <strong>Donusum + 2 Telafi</strong>
+            <span>Hafta sonu donusumlu izin kullanir. Calisilan hafta sonlarinin karsiliginda hafta ici 2 telafi izni alir.</span>
+          </div>
+          <div class="leave-info-card">
+            <strong>2 Haftada 1 Hafta Sonu</strong>
+            <span>Iki haftada bir hafta sonu izinlidir. Ayrica hafta ici telafi izni verilmez.</span>
+          </div>
+          <div class="leave-info-card">
+            <strong>Izin Kullanma</strong>
+            <span>Ek izin modeli uygulanmaz. Sadece gorevinden gelen zorunlu izinler gecerli olur.</span>
+          </div>
+        </div>
+      </div>
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel print-hide">
       <div id="warnings"></div>
+      <div id="focusBar" class="focus-bar">
+        <div id="focusText" class="focus-text"></div>
+        <button id="clearFocusBtn" class="focus-clear" type="button">Secimi Temizle</button>
+      </div>
       <div id="stats" class="stats"></div>
     </section>
 
-    <section class="panel">
-      <div class="calendar-head">
+    <section class="panel printable-calendar">
+      <div class="print-title">
+        <h3 id="printTitle">Vardiya Takvimi</h3>
+      </div>
+      <div class="calendar-head screen-calendar">
         <div>Pzt</div><div>Sal</div><div>Car</div><div>Per</div><div>Cum</div><div>Cmt</div><div>Paz</div>
       </div>
-      <div id="calendar" class="calendar-grid"></div>
+      <div id="calendar" class="calendar-grid screen-calendar"></div>
+      <table class="print-calendar-table print-only">
+        <thead>
+          <tr>
+            <th>Pzt</th>
+            <th>Sal</th>
+            <th>Car</th>
+            <th>Per</th>
+            <th>Cum</th>
+            <th class="weekend-head">Cmt</th>
+            <th class="weekend-head">Paz</th>
+          </tr>
+        </thead>
+        <tbody id="printCalendarBody"></tbody>
+      </table>
+      <div class="print-summary print-only">
+        <h3>Kisi Bazli Calisma ve Izin Ozeti</h3>
+        <table class="person-table">
+          <thead>
+            <tr>
+              <th>Personel</th>
+              <th>Tip</th>
+              <th>Izin Modeli</th>
+              <th>CG</th>
+              <th>IG</th>
+            </tr>
+          </thead>
+          <tbody id="printPersonHours"></tbody>
+        </table>
+      </div>
     </section>
 
-    <section class="panel">
+    <section class="panel print-hide">
       <div class="export-actions">
+        <button id="pdfBtn" class="btn run" type="button" style="width:auto;padding:8px 14px;">PDF indir</button>
         <button id="exportBtn" class="btn run" type="button" style="width:auto;padding:8px 14px;">Excel'e Aktar</button>
       </div>
-      <div class="export-wrap">
+      <div class="export-wrap visually-hidden-export">
         <table id="exportTable" class="person-table">
           <thead>
             <tr>
@@ -353,9 +697,22 @@
       </div>
     </section>
 
-    <section class="panel">
-      <h3>Kisi Bazli Toplam Mesai</h3>
-      <div id="personHours" class="hours-grid"></div>
+    <section class="panel print-hide">
+      <h3>Kisi Bazli Calisma ve Izin Ozeti</h3>
+      <div class="hours-wrap">
+        <table class="person-table">
+          <thead>
+            <tr>
+              <th>Personel</th>
+              <th>Tip</th>
+              <th>Izin Modeli</th>
+              <th>CG</th>
+              <th>IG</th>
+            </tr>
+          </thead>
+          <tbody id="personHours"></tbody>
+        </table>
+      </div>
     </section>
   </div>
 
