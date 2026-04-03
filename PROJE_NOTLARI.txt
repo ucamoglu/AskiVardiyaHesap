@@ -1,0 +1,272 @@
+ASKI Vardiya Hesaplama Projesi
+
+1. Projenin Amaci
+
+Bu proje, cagri merkezi personeli icin vardiya takvimi uretmek icin hazirlanmistir.
+Arayuzde secilen yil ve aya gore takvim olusturulur.
+Takvimle birlikte kisi bazli calisma ve izin ozeti de gosterilir.
+PDF ve Excel ciktilari alinabilir.
+
+Projede asil hedef:
+
+- izin kurallarini bozmadan vardiya dagitimi yapmak
+- kisi bazli CG / IG degerlerini dogru hesaplamak
+- ayni izin modelindeki personeller icin adil bir dagilim kurmak
+- ay basi ve ay sonu gecislerinde periyodu bozmamak
+
+
+2. Personel Tipleri
+
+Projede personel tipleri:
+
+- sef
+- gececi
+- yedek_gececi
+- normal
+
+Kurallar:
+
+- Sef sadece hafta ici A vardiyasinda calisir.
+- Sef hafta sonu izinlidir.
+- Gececi C vardiyasinda calisir.
+- Gececi 6 gun calisir, 2 gun izin yapar.
+- Yedek gececi, gececi izinliyken C vardiyasini devralabilir.
+- Yedek gececi gececi yerine 2 gece tuttugunda ertesi gun izin yapar.
+- Normal personel A/B vardiyalarina dagitilir.
+
+
+3. Izin Modelleri
+
+Projede 3 izin modeli vardir:
+
+1. Donusum + 2 Telafi
+2. 2 Haftada 1 Hafta Sonu
+3. Izin Kullanma
+
+Aciklamalari:
+
+Donusum + 2 Telafi:
+- 1 hafta sonu izin
+- sonraki hafta hafta ici izin
+- sonra tekrar hafta sonu izin
+- sonra tekrar hafta ici izin
+- bu dongu surekli devam eder
+
+2 Haftada 1 Hafta Sonu:
+- 1 hafta sonu izin
+- sonraki hafta sonu izin yok
+- sonra tekrar hafta sonu izin
+- bu dongu surekli devam eder
+
+Izin Kullanma:
+- ekstra izin modeli yok
+- sadece gorevden gelen zorunlu izinler gecerlidir
+
+Onemli not:
+- izin modelleri aylik degil, periyodik ve surekli dusunulmelidir
+- ay degisince dongu sifirlanmaz
+
+
+4. Vardiya Saatleri
+
+- A: 08:00 - 16:00
+- B: 16:00 - 00:00
+- C: 00:00 - 08:00
+
+
+5. Personel Sinirlari
+
+Mevcut kabul edilen sinirlar:
+
+Hafta ici:
+- A: min 7, max 8
+- B: min 3, max 7
+- C: 1
+
+Hafta sonu:
+- A: en az 3
+- B: en az 3
+- C: 1
+
+Not:
+- Hafta sonu A ve B icin ust sinir esnetildi.
+- Bunun nedeni, "izinli degilse vardiyada olacak" kuralini teknik olarak korumaktir.
+
+
+6. Uygulamada Kabul Edilen Temel Is Kurallari
+
+- Kisi ya calisir ya izinlidir.
+- Ekstra izin uretilmemelidir.
+- Izinli degilse ve kapasite varsa vardiyada olmalidir.
+- Izin modeli, vardiya dagitimindan once gelir.
+- Vardiya dagitimi izin modelini bozamaz.
+- Ayni izin modelindeki personeller icin adalet onemlidir.
+- Ayni hafta icinde A/B taraf karisimi mumkun oldugunca engellenir.
+- Ancak minimum personel kurali gerektiginde bu kilit kontrollu esnetilebilir.
+
+
+7. CG ve IG Mantigi
+
+CG = Calistigi Gun
+IG = Izinli Gun
+
+Dogru yorum:
+
+- CG, kisi A/B/C vardiyalarindan herhangi birinde gorevliyse artar
+- IG, kisi model veya gorev kurali geregi izinliyse artar
+
+Gecmiste yasanan sorun:
+- "vardiyaya yazilmayan" kisi yanlislikla izinli sayildi
+- bu da ozellikle weekend_only grubunda fazla izin gunu urettigi goruntusune yol acti
+
+Son kabul edilen mantik:
+- ekstra izin yok
+- izin sadece model veya gorev kuralindan gelir
+
+
+8. Nisan 2026 Gozlemi
+
+Nisan 2026 verisinde CG / IG dagilimlari daha basarili goruldu.
+Bunun nedeni:
+
+- 30 gun olmasi
+- 4 hafta sonu bloguna sahip olmasi
+- bloklarin daha rahat esit dagilmasi
+
+
+9. Mayis 2026 Gozlemi
+
+Mayis 2026'da esitlik daha zor goruldu.
+Bunun nedeni:
+
+- 31 gun olmasi
+- 5 hafta sonu blogu icermesi
+- izinlerin 2 gunluk bloklar halinde uygulanmasi
+
+Bu nedenle ayni modelde her zaman birebir ayni IG/CG cikmayabilir.
+Ama buna ragmen hedef:
+
+- modeli bozmamak
+- ayni kisiye surekli avantaj veya dezavantaj biriktirmemek
+- ay icinde mumkun olan en adil dagilimi saglamaktir
+
+
+10. PDF ve Raporlama Tarafi
+
+Projede su ozellikler vardir:
+
+- PDF indir
+- Excel'e aktar
+- PDF icin kurumsal baslik
+- logo kullanimi
+- ay ve yil bilgisi secili degerlerden dinamik gelir
+- tatil gunleri gun kartlarinda kirmizi kalin satir olarak gosterilir
+
+PDF basligi:
+
+AYDIN BUYUKSEHIR BELEDIYESI
+SU VE KANALIZASYON IDARESI GENEL MUDURLUGU
+BILGI ISLEM DAIRESI BASKANLIGI
+CAGRI MERKEZI {AY} {YIL} DONEMI VARDIYA CIZELGESI
+
+Not:
+- uygulama ekraninda da ayni baslik formati kullanilir
+- ay/yil bilgisi dinamik gelir
+
+
+11. Resmi Tatiller
+
+2026 resmi tatilleri takvime islenmistir.
+Gun basliginin altinda kirmizi ve kalin yazi olarak gorunur.
+
+Eklenen tatiller:
+
+- Yilbasi
+- 23 Nisan
+- 1 Mayis
+- 19 Mayis
+- 15 Temmuz
+- 30 Agustos
+- 29 Ekim Arifesi
+- 29 Ekim
+- Ramazan Arifesi / Ramazan Bayrami
+- Kurban Arifesi / Kurban Bayrami
+
+
+12. Bu Asamada Kabul Edilen Durum
+
+Su anda sistem icin kabul edilen ana fikir:
+
+- izin dongusu dogru kurulursa aylik takvim daha anlamli olur
+- ekstra izin yazilmamali
+- izin modeli disi yapay bos gun uretilmemeli
+- once izin kurali, sonra vardiya dagitimi yapilmali
+
+
+13. Bir Sonraki Buyuk Adim: Yillik Mantik
+
+Konusmalar sonucu gelinen en saglikli sonraki mimari:
+
+"Yillik uretim + aylik gosterim"
+
+Yani:
+
+- sistem arka planda uzun bir donem icin plan uretir
+- kullanici ekranda yine sadece secilen ayi gorur
+- ama o ay, daha buyuk periyodik planin bir kesiti olur
+
+Neden gerekli:
+
+- izin modelleri ay bazli degil, surekli donen periyotlar
+- ayin basi ve sonu yapay sinir olunca esitlik bozulabiliyor
+- 4 hafta sonu olan ay ile 5 hafta sonu olan ay farkli davraniyor
+- yillik mantikta bu farklar zaman icinde dengelenir
+
+
+14. Konusulan Yillik Uygulama Sekli
+
+Tam yil yerine ilk asamada su aralik dusunuldu:
+
+01.04.2026 - 31.12.2026
+
+Bu aralikta:
+
+- izin modelleri kesintisiz akar
+- kisi fazlari ay ay sifirlanmaz
+- secilen ay sadece bu buyuk planin gorunen parcasi olur
+
+
+15. Yillik Mantikta Yapilacaklar
+
+Asagidaki adimlar daha sonra gelistirilebilir:
+
+1. Her personel icin bir "faz" tanimla.
+   Ornek:
+   - weekend_only icin izinli hafta sonu fazi
+   - telafi icin hafta sonu izin haftasi / hafta ici telafi haftasi fazi
+
+2. Baslangic tarihi icin sabit referans belirle.
+   Ornek:
+   - 01.04.2026 tarihinde kim hangi fazda basliyor?
+
+3. Tum donem icin once sadece izin planini uret.
+
+4. Sonra bu izin planinin ustune vardiya dagitimi yap.
+
+5. Son olarak secilen ayi goster.
+
+
+16. Yillik Mantikta Beklenen Fayda
+
+- Nisan gibi iyi gorunen aylar korunur
+- Mayis gibi 5 hafta sonu olan aylar daha dogru yorumlanir
+- ayni modeldeki farklar tek aya gore degil donem geneline gore degerlendirilir
+- adalet daha iyi saglanir
+- ay basi ve sonu gecisleri dogal hale gelir
+
+
+17. Bu Dosyanin Amaci
+
+Bu dosya, projede su ana kadar alinmis kararlarin ozetidir.
+Gerektiginde bu belgeye bakilarak proje mantigi yeniden hatirlanabilir.
+Ozellikle ileride yillik plan mantigina gecilirken bu dokumandan devam edilmelidir.
