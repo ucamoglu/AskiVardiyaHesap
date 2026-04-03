@@ -295,6 +295,40 @@ function buildInstitutionTitleHtml(year, month) {
   ].join("<br>");
 }
 
+function getOfficialHolidayLabel(date) {
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  const key = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+  const fixedHolidays = {
+    [`${y}-01-01`]: "Yılbaşı",
+    [`${y}-04-23`]: "23 Nisan",
+    [`${y}-05-01`]: "1 Mayıs",
+    [`${y}-05-19`]: "19 Mayıs",
+    [`${y}-07-15`]: "15 Temmuz",
+    [`${y}-08-30`]: "30 Ağustos",
+    [`${y}-10-28`]: "29 Ekim Arifesi",
+    [`${y}-10-29`]: "29 Ekim"
+  };
+
+  if (fixedHolidays[key]) return fixedHolidays[key];
+
+  const movable2026 = {
+    "2026-03-19": "Ramazan Arifesi",
+    "2026-03-20": "Ramazan Bayramı",
+    "2026-03-21": "Ramazan Bayramı",
+    "2026-03-22": "Ramazan Bayramı",
+    "2026-05-26": "Kurban Arifesi",
+    "2026-05-27": "Kurban Bayramı",
+    "2026-05-28": "Kurban Bayramı",
+    "2026-05-29": "Kurban Bayramı",
+    "2026-05-30": "Kurban Bayramı"
+  };
+
+  return movable2026[key] || "";
+}
+
 function buildNightPlan(days, y, m, gececiName, yedekName) {
   const cAssignments = {};
   const forcedOff = {};
@@ -748,6 +782,7 @@ function renderAll() {
     const date = new Date(y, m - 1, d);
     const day = date.getDay();
     const isWeekend = day === 0 || day === 6;
+    const holidayLabel = getOfficialHolidayLabel(date);
     const weekKey = getWeekKey(date);
     const weekSerial = getWeekSerial(date);
     const { minA, maxA, minB, maxB } = getShiftBounds(isWeekend);
@@ -892,6 +927,7 @@ function renderAll() {
       d,
       day,
       isWeekend,
+      holidayLabel,
       weekKey,
       aPeople: aPeople.slice(),
       bPeople: bPeople.slice(),
@@ -946,6 +982,7 @@ function renderAll() {
     }
     card.innerHTML = [
       '<div class="d">' + plan.d + ' - ' + dayNameTr(plan.day) + '</div>',
+      (plan.holidayLabel ? '<div class="holiday-note">' + escapeHtml(plan.holidayLabel) + '</div>' : ''),
       '<div class="row a">A (08-16): ' + plan.aPeople.filter((name) => name !== "Eksik").length + ' kisi</div>',
       '<div class="names a-names">' + renderNameList(plan.aPeople, selectedPersonName, "work") + '</div>',
       '<div class="row b">B (16-00): ' + plan.bPeople.filter((name) => name !== "Eksik").length + ' kisi</div>',
