@@ -1,22 +1,24 @@
 const STORAGE_KEY = "vardiya_format_v4";
 const DEFAULT_PERSONNEL = [
-  { id: "p1", gender: "E", name: "Erhan", type: "gececi", leaveMode: "none" },
-  { id: "p2", gender: "K", name: "Deniz", type: "sef", leaveMode: "none" },
-  { id: "p3", gender: "E", name: "Atilla", type: "normal", leaveMode: "telafi" },
-  { id: "p4", gender: "K", name: "Canel", type: "normal", leaveMode: "telafi" },
-  { id: "p5", gender: "K", name: "Cevriye", type: "normal", leaveMode: "telafi" },
-  { id: "p6", gender: "K", name: "Dilara", type: "normal", leaveMode: "telafi" },
-  { id: "p7", gender: "K", name: "Funda", type: "normal", leaveMode: "telafi" },
-  { id: "p8", gender: "K", name: "Nurten", type: "normal", leaveMode: "telafi" },
-  { id: "p9", gender: "E", name: "Uğur", type: "normal", leaveMode: "telafi" },
-  { id: "p10", gender: "K", name: "Raziye", type: "normal", leaveMode: "telafi" },
-  { id: "p11", gender: "K", name: "Habibe", type: "normal", leaveMode: "telafi" },
-  { id: "p12", gender: "K", name: "Beyhan", type: "normal", leaveMode: "weekend_only" },
-  { id: "p13", gender: "E", name: "Mehmet Balcı", type: "yedek_gececi", leaveMode: "weekend_only" },
-  { id: "p14", gender: "E", name: "Mehmet Ünlü", type: "normal", leaveMode: "weekend_only" },
-  { id: "p15", gender: "E", name: "Serkan", type: "normal", leaveMode: "weekend_only" },
-  { id: "p16", gender: "K", name: "Tuğba", type: "normal", leaveMode: "weekend_only" }
+  { id: "p1", gender: "E", name: "Erhan İNCEGÜNEŞ", type: "gececi", leaveMode: "none" },
+  { id: "p2", gender: "K", name: "Deniz ÇELİK", type: "sef", leaveMode: "none" },
+  { id: "p3", gender: "E", name: "Atilla GİRGİN", type: "normal", leaveMode: "telafi" },
+  { id: "p4", gender: "K", name: "Canel DUMLUPINAR", type: "normal", leaveMode: "telafi" },
+  { id: "p5", gender: "K", name: "Cevriye UYGURLU", type: "normal", leaveMode: "telafi" },
+  { id: "p6", gender: "K", name: "Dilara ERTEK", type: "normal", leaveMode: "telafi" },
+  { id: "p7", gender: "K", name: "Funda CANTİMUR", type: "normal", leaveMode: "telafi" },
+  { id: "p8", gender: "K", name: "Nurten AKTAR", type: "normal", leaveMode: "telafi" },
+  { id: "p9", gender: "E", name: "Uğur SAYAN", type: "normal", leaveMode: "telafi" },
+  { id: "p10", gender: "K", name: "Raziye DALKIRAN", type: "normal", leaveMode: "telafi" },
+  { id: "p11", gender: "K", name: "Habibe SARIKAYA", type: "normal", leaveMode: "telafi" },
+  { id: "p12", gender: "K", name: "Beyhan ÇELİK", type: "normal", leaveMode: "weekend_only" },
+  { id: "p13", gender: "E", name: "Mehmet BALCI", type: "yedek_gececi", leaveMode: "weekend_only" },
+  { id: "p14", gender: "E", name: "Mehmet ÜNLÜ", type: "normal", leaveMode: "weekend_only" },
+  { id: "p15", gender: "E", name: "Serkan ÇİTE", type: "normal", leaveMode: "weekend_only" },
+  { id: "p16", gender: "K", name: "Tuğba KARACA", type: "normal", leaveMode: "weekend_only" }
 ];
+
+const DEFAULT_PERSONNEL_BY_ID = Object.fromEntries(DEFAULT_PERSONNEL.map((person) => [person.id, person]));
 
 const yearEl = document.getElementById("year");
 const monthEl = document.getElementById("month");
@@ -147,6 +149,17 @@ function labelForPersonType(type) {
   return PERSON_TYPE_LABELS[type] || type;
 }
 
+function shouldReplaceStoredName(currentName, defaultName) {
+  if (!currentName) return true;
+  if (currentName === defaultName) return false;
+  const normalizedCurrent = currentName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const normalizedDefault = defaultName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const currentParts = normalizedCurrent.split(/\s+/).filter(Boolean);
+  const defaultParts = normalizedDefault.split(/\s+/).filter(Boolean);
+  if (currentParts.length >= defaultParts.length) return false;
+  return defaultParts.slice(0, currentParts.length).join(" ") === currentParts.join(" ");
+}
+
 function saveState() {
   const safe = sanitizeYearMonth(yearEl.value, monthEl.value);
   state.year = safe.year;
@@ -171,6 +184,9 @@ function loadState() {
         month: safe.month,
         personnel: personnel.map((person) => ({
           ...person,
+          name: shouldReplaceStoredName(person.name, DEFAULT_PERSONNEL_BY_ID[person.id]?.name || person.name)
+            ? (DEFAULT_PERSONNEL_BY_ID[person.id]?.name || person.name)
+            : person.name,
           leaveMode: person.leaveMode || "telafi"
         }))
       };
@@ -537,75 +553,7 @@ function replacePerson(list, fromName, toName) {
 }
 
 function rebalanceComparableGroups(dailyPlans, personnelMap) {
-  const comparableGroups = {};
-
-  Object.values(personnelMap).forEach((person) => {
-    const key = getComparableAssignmentGroup(person);
-    if (!key) return;
-    comparableGroups[key] = comparableGroups[key] || [];
-    comparableGroups[key].push(person.name);
-  });
-
-  Object.values(comparableGroups).forEach((groupNames) => {
-    if (groupNames.length < 2) return;
-
-    const workCount = Object.fromEntries(groupNames.map((name) => [name, 0]));
-    dailyPlans.forEach((plan) => {
-      groupNames.forEach((name) => {
-        if (plan.aPeople.includes(name) || plan.bPeople.includes(name)) workCount[name] += 1;
-      });
-    });
-
-    const stableOrderedGroup = groupNames.slice().sort((left, right) => left.localeCompare(right, "tr"));
-    const totalGroupWork = stableOrderedGroup.reduce((sum, name) => sum + workCount[name], 0);
-    const baseTarget = Math.floor(totalGroupWork / stableOrderedGroup.length);
-    const remainder = totalGroupWork % stableOrderedGroup.length;
-    const targetWork = {};
-    stableOrderedGroup.forEach((name, index) => {
-      targetWork[name] = baseTarget + (index < remainder ? 1 : 0);
-    });
-
-    let changed = true;
-    let safety = 0;
-    while (changed && safety < 500) {
-      safety += 1;
-      changed = false;
-      const ordered = groupNames.slice().sort((left, right) => workCount[right] - workCount[left] || left.localeCompare(right, "tr"));
-      const maxWork = workCount[ordered[0]];
-      const minWork = workCount[ordered[ordered.length - 1]];
-      if (maxWork - minWork <= 0) break;
-
-      for (let i = 0; i < ordered.length && !changed; i += 1) {
-        const overName = ordered[i];
-        if (workCount[overName] <= targetWork[overName]) continue;
-
-        for (let j = ordered.length - 1; j >= 0 && !changed; j -= 1) {
-          const underName = ordered[j];
-          if (workCount[underName] >= targetWork[underName]) continue;
-
-          for (let p = 0; p < dailyPlans.length && !changed; p += 1) {
-            const plan = dailyPlans[p];
-            const side = getPlanSideForPerson(plan, overName);
-            if (!side) continue;
-            if (!plan.extraOffList.includes(underName)) continue;
-            const underWeeklySide = getWeeklySideFromPlans(dailyPlans, plan.weekKey, underName);
-            if (underWeeklySide && underWeeklySide !== side) continue;
-
-            if (side === "A") replacePerson(plan.aPeople, overName, underName);
-            else replacePerson(plan.bPeople, overName, underName);
-
-            plan.extraOffList = plan.extraOffList.filter((name) => name !== underName);
-            if (!plan.extraOffList.includes(overName)) plan.extraOffList.push(overName);
-            plan.offList = [...plan.plannedOffList, ...plan.extraOffList];
-            workCount[overName] -= 1;
-            workCount[underName] += 1;
-            changed = true;
-          }
-
-        }
-      }
-    }
-  });
+  return dailyPlans;
 }
 
 function renderWarnings(warnings) {
@@ -920,8 +868,8 @@ function renderAll() {
 
     const assignedNames = new Set([...aPeople, ...bPeople, cPerson].filter((name) => name && name !== "Eksik"));
     let plannedOffList = allNames.filter((name) => leaveSet.has(name) && !assignedNames.has(name));
-    let extraOffList = allNames.filter((name) => !assignedNames.has(name) && !leaveSet.has(name));
-    let offList = [...plannedOffList, ...extraOffList];
+    let extraOffList = [];
+    let offList = plannedOffList.slice();
 
     dailyPlans.push({
       d,
