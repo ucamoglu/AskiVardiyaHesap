@@ -38,6 +38,7 @@ const exportBtn = document.getElementById("exportBtn");
 const pdfBtn = document.getElementById("pdfBtn");
 const exportTable = document.getElementById("exportTable");
 const exportTableBody = document.getElementById("exportTableBody");
+const screenTitleEl = document.getElementById("screenTitle");
 const printTitleEl = document.getElementById("printTitle");
 const printPersonHoursEl = document.getElementById("printPersonHours");
 const printCalendarBodyEl = document.getElementById("printCalendarBody");
@@ -49,10 +50,19 @@ let state = { year: 0, month: 0, personnel: [] };
 let editingId = null;
 let selectedPersonName = null;
 
-const LEAVE_MODE_LABELS = {
-  telafi: "Donusum + 2 Telafi",
-  weekend_only: "2 Haftada 1 Hafta Sonu",
-  none: "Izin Kullanma"
+const LEAVE_MODE_RULES = {
+  telafi: {
+    label: "Donusum + 2 Telafi",
+    equalizeNormal: true
+  },
+  weekend_only: {
+    label: "2 Haftada 1 Hafta Sonu",
+    equalizeNormal: true
+  },
+  none: {
+    label: "Izin Kullanma",
+    equalizeNormal: false
+  }
 };
 
 const PERSON_TYPE_LABELS = {
@@ -130,7 +140,7 @@ function normalizeName(name) {
 }
 
 function labelForLeaveMode(mode) {
-  return LEAVE_MODE_LABELS[mode] || LEAVE_MODE_LABELS.telafi;
+  return (LEAVE_MODE_RULES[mode] || LEAVE_MODE_RULES.telafi).label;
 }
 
 function labelForPersonType(type) {
@@ -254,8 +264,35 @@ function upsertPerson() {
 }
 
 function dayNameTr(day) {
-  const names = ["Pazar", "Pazartesi", "Sali", "Carsamba", "Persembe", "Cuma", "Cumartesi"];
+  const names = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
   return names[day] || "";
+}
+
+function monthNameTr(month) {
+  const names = [
+    "Ocak",
+    "Şubat",
+    "Mart",
+    "Nisan",
+    "Mayıs",
+    "Haziran",
+    "Temmuz",
+    "Ağustos",
+    "Eylül",
+    "Ekim",
+    "Kasım",
+    "Aralık"
+  ];
+  return names[month - 1] || "";
+}
+
+function buildInstitutionTitleHtml(year, month) {
+  return [
+    "AYDIN BÜYÜKŞEHİR BELEDİYESİ",
+    "SU VE KANALİZASYON İDARESİ GENEL MÜDÜRLÜĞÜ",
+    "BİLGİ İŞLEM DAİRESİ BAŞKANLIĞI",
+    'ÇAĞRI MERKEZİ <span class="title-period print-title-period">' + monthNameTr(month).toLocaleUpperCase("tr-TR") + " " + year + "</span> DÖNEMİ VARDİYA ÇİZELGESİ"
+  ].join("<br>");
 }
 
 function buildNightPlan(days, y, m, gececiName, yedekName) {
@@ -292,7 +329,8 @@ function addOffDay(targetMap, day, name) {
 }
 
 function getComparableAssignmentGroup(person) {
-  if (person?.type === "normal" && (person.leaveMode === "telafi" || person.leaveMode === "weekend_only")) {
+  const modeRule = person ? LEAVE_MODE_RULES[person.leaveMode] : null;
+  if (person?.type === "normal" && modeRule?.equalizeNormal) {
     return `${person.type}:${person.leaveMode}`;
   }
   return null;
@@ -301,46 +339,62 @@ function getComparableAssignmentGroup(person) {
 function buildWeekendSchedules(personnel, days, y, m) {
   const weekendOff = {};
   const telafiOff = {};
-  const eligible = getStableSortedPersonnel(
-    personnel.filter((person) => person.type === "normal" || person.type === "yedek_gececi")
-  );
-  const groupPhaseIndex = {};
   const monthStart = new Date(y, m - 1, 1);
   const monthEnd = new Date(y, m - 1, days);
   const firstRelevantWeekStart = startOfWeek(monthStart);
   const lastRelevantWeekStart = startOfWeek(monthEnd);
+  const weekendBlocks = [];
+  for (let weekStart = new Date(firstRelevantWeekStart); weekStart <= lastRelevantWeekStart; weekStart.setDate(weekStart.getDate() + 7)) {
+    const monday = new Date(weekStart);
+    const tuesday = new Date(weekStart);
+    tuesday.setDate(tuesday.getDate() + 1);
+    const saturday = new Date(weekStart);
+    saturday.setDate(saturday.getDate() + 5);
+    const sunday = new Date(saturday);
+    sunday.setDate(sunday.getDate() + 1);
+    weekendBlocks.push({
+      monday,
+      tuesday,
+      saturday,
+      sunday
+    });
+  }
 
+  const eligible = getStableSortedPersonnel(
+    personnel.filter((person) => person.type === "normal" || person.type === "yedek_gececi")
+  );
+  const grouped = {};
   eligible.forEach((person) => {
     if (person.leaveMode === "none") return;
     const groupKey = `${person.type}:${person.leaveMode}`;
-    const phase = (groupPhaseIndex[groupKey] || 0) % 2;
-    groupPhaseIndex[groupKey] = (groupPhaseIndex[groupKey] || 0) + 1;
+    grouped[groupKey] = grouped[groupKey] || [];
+    grouped[groupKey].push(person);
+  });
 
-    for (let weekStart = new Date(firstRelevantWeekStart); weekStart <= lastRelevantWeekStart; weekStart.setDate(weekStart.getDate() + 7)) {
-      const monday = new Date(weekStart);
-      const tuesday = new Date(weekStart);
-      tuesday.setDate(tuesday.getDate() + 1);
-      const saturday = new Date(weekStart);
-      saturday.setDate(saturday.getDate() + 5);
-      const sunday = new Date(saturday);
-      sunday.setDate(sunday.getDate() + 1);
-      const weekendOffWeek = getWeekSerial(weekStart) % 2 === phase;
+  Object.entries(grouped).forEach(([groupKey, groupPeople]) => {
+    groupPeople.forEach((person, index) => {
+      const phaseBase = index % 2;
+      const phase = person.leaveMode === "telafi" ? (phaseBase + 1) % 2 : phaseBase;
 
-      if (person.leaveMode === "telafi") {
-        if (weekendOffWeek) {
-          if (saturday.getMonth() === m - 1 && saturday.getFullYear() === y) addOffDay(weekendOff, saturday.getDate(), person.name);
-          if (sunday.getMonth() === m - 1 && sunday.getFullYear() === y) addOffDay(weekendOff, sunday.getDate(), person.name);
-        } else {
-          if (monday.getMonth() === m - 1 && monday.getFullYear() === y) addOffDay(telafiOff, monday.getDate(), person.name);
-          if (tuesday.getMonth() === m - 1 && tuesday.getFullYear() === y) addOffDay(telafiOff, tuesday.getDate(), person.name);
+      weekendBlocks.forEach((block, blockIndex) => {
+        const weekendOffWeek = (blockIndex % 2) === phase;
+
+        if (person.leaveMode === "telafi") {
+          if (weekendOffWeek) {
+            if (block.saturday.getMonth() === m - 1 && block.saturday.getFullYear() === y) addOffDay(weekendOff, block.saturday.getDate(), person.name);
+            if (block.sunday.getMonth() === m - 1 && block.sunday.getFullYear() === y) addOffDay(weekendOff, block.sunday.getDate(), person.name);
+          } else {
+            if (block.monday.getMonth() === m - 1 && block.monday.getFullYear() === y) addOffDay(telafiOff, block.monday.getDate(), person.name);
+            if (block.tuesday.getMonth() === m - 1 && block.tuesday.getFullYear() === y) addOffDay(telafiOff, block.tuesday.getDate(), person.name);
+          }
         }
-      }
 
-      if (person.leaveMode === "weekend_only" && weekendOffWeek) {
-        if (saturday.getMonth() === m - 1 && saturday.getFullYear() === y) addOffDay(weekendOff, saturday.getDate(), person.name);
-        if (sunday.getMonth() === m - 1 && sunday.getFullYear() === y) addOffDay(weekendOff, sunday.getDate(), person.name);
-      }
-    }
+        if (person.leaveMode === "weekend_only" && weekendOffWeek) {
+          if (block.saturday.getMonth() === m - 1 && block.saturday.getFullYear() === y) addOffDay(weekendOff, block.saturday.getDate(), person.name);
+          if (block.sunday.getMonth() === m - 1 && block.sunday.getFullYear() === y) addOffDay(weekendOff, block.sunday.getDate(), person.name);
+        }
+      });
+    });
   });
 
   return { weekendOff, telafiOff };
@@ -365,8 +419,8 @@ function appendUnique(list, items) {
 
 function getShiftBounds(isWeekend) {
   return isWeekend
-    ? { minA: 2, maxA: 4, minB: 2, maxB: 4 }
-    : { minA: 6, maxA: 8, minB: 3, maxB: 7 };
+    ? { minA: 3, maxA: null, minB: 3, maxB: null }
+    : { minA: 7, maxA: 8, minB: 3, maxB: 7 };
 }
 
 function sortCandidates(names, side, stats, personIndex, weekSerial, isWeekend, personnelMap) {
@@ -403,6 +457,16 @@ function pickNextCandidate(candidates, used) {
   for (let i = 0; i < candidates.length; i += 1) {
     const name = candidates[i];
     if (used.has(name)) continue;
+    used.add(name);
+    return name;
+  }
+  return null;
+}
+
+function pickFallbackCandidate(names, used) {
+  for (let i = 0; i < names.length; i += 1) {
+    const name = names[i];
+    if (used.has(name) || name === "Eksik") continue;
     used.add(name);
     return name;
   }
@@ -458,71 +522,52 @@ function rebalanceComparableGroups(dailyPlans, personnelMap) {
       });
     });
 
+    const stableOrderedGroup = groupNames.slice().sort((left, right) => left.localeCompare(right, "tr"));
+    const totalGroupWork = stableOrderedGroup.reduce((sum, name) => sum + workCount[name], 0);
+    const baseTarget = Math.floor(totalGroupWork / stableOrderedGroup.length);
+    const remainder = totalGroupWork % stableOrderedGroup.length;
+    const targetWork = {};
+    stableOrderedGroup.forEach((name, index) => {
+      targetWork[name] = baseTarget + (index < remainder ? 1 : 0);
+    });
+
     let changed = true;
-    while (changed) {
+    let safety = 0;
+    while (changed && safety < 500) {
+      safety += 1;
       changed = false;
       const ordered = groupNames.slice().sort((left, right) => workCount[right] - workCount[left] || left.localeCompare(right, "tr"));
       const maxWork = workCount[ordered[0]];
       const minWork = workCount[ordered[ordered.length - 1]];
-      if (maxWork - minWork <= 1) break;
+      if (maxWork - minWork <= 0) break;
 
       for (let i = 0; i < ordered.length && !changed; i += 1) {
         const overName = ordered[i];
-        if (workCount[overName] <= minWork) continue;
+        if (workCount[overName] <= targetWork[overName]) continue;
 
         for (let j = ordered.length - 1; j >= 0 && !changed; j -= 1) {
           const underName = ordered[j];
-          if (workCount[overName] - workCount[underName] <= 1) continue;
+          if (workCount[underName] >= targetWork[underName]) continue;
 
           for (let p = 0; p < dailyPlans.length && !changed; p += 1) {
             const plan = dailyPlans[p];
             const side = getPlanSideForPerson(plan, overName);
             if (!side) continue;
-            if (!plan.offList.includes(underName)) continue;
+            if (!plan.extraOffList.includes(underName)) continue;
             const underWeeklySide = getWeeklySideFromPlans(dailyPlans, plan.weekKey, underName);
             if (underWeeklySide && underWeeklySide !== side) continue;
 
             if (side === "A") replacePerson(plan.aPeople, overName, underName);
             else replacePerson(plan.bPeople, overName, underName);
 
-            plan.offList = plan.offList.filter((name) => name !== underName);
-            if (!plan.offList.includes(overName)) plan.offList.push(overName);
+            plan.extraOffList = plan.extraOffList.filter((name) => name !== underName);
+            if (!plan.extraOffList.includes(overName)) plan.extraOffList.push(overName);
+            plan.offList = [...plan.plannedOffList, ...plan.extraOffList];
             workCount[overName] -= 1;
             workCount[underName] += 1;
             changed = true;
           }
 
-          for (let p = 0; p < dailyPlans.length && !changed; p += 1) {
-            const plan = dailyPlans[p];
-            if (!plan.offList.includes(underName)) continue;
-
-            const preferredSide = getWeeklySideFromPlans(dailyPlans, plan.weekKey, underName);
-            const candidateSides = preferredSide ? [preferredSide] : ["A", "B"];
-
-            for (let s = 0; s < candidateSides.length && !changed; s += 1) {
-              const side = candidateSides[s];
-              const assignedList = side === "A" ? plan.aPeople : plan.bPeople;
-
-              for (let a = 0; a < assignedList.length && !changed; a += 1) {
-                const assignedName = assignedList[a];
-                if (!assignedName || assignedName === "Eksik") continue;
-                if (groupNames.includes(assignedName)) continue;
-
-                const assignedPerson = personnelMap[assignedName];
-                if (!assignedPerson || assignedPerson.type === "sef" || assignedPerson.type === "gececi") continue;
-
-                const assignedWeeklySide = getWeeklySideFromPlans(dailyPlans, plan.weekKey, assignedName);
-                if (assignedWeeklySide && assignedWeeklySide !== side) continue;
-                if ((workCount[underName] + 1) > maxWork) continue;
-
-                replacePerson(assignedList, assignedName, underName);
-                plan.offList = plan.offList.filter((name) => name !== underName);
-                if (!plan.offList.includes(assignedName)) plan.offList.push(assignedName);
-                workCount[underName] += 1;
-                changed = true;
-              }
-            }
-          }
         }
       }
     }
@@ -559,7 +604,7 @@ function exportToExcel() {
 function exportToPdf() {
   const safe = sanitizeYearMonth(yearEl.value, monthEl.value);
   if (printTitleEl) {
-    printTitleEl.textContent = "Vardiya Takvimi - " + String(safe.month).padStart(2, "0") + "." + safe.year;
+    printTitleEl.innerHTML = buildInstitutionTitleHtml(safe.year, safe.month);
   }
   window.print();
 }
@@ -586,11 +631,43 @@ function escapeHtml(value) {
 function renderNameList(names, focusedName, mode) {
   if (!names.length) return "-";
   return names.map((name) => {
-    if (name === focusedName) {
-      return '<span class="focus-name' + (mode === "off" ? " off" : "") + '">' + escapeHtml(name) + "</span>";
-    }
-    return escapeHtml(name);
-  }).join(", ");
+    const content = name === focusedName
+      ? '<span class="focus-name' + (mode === "off" ? " off" : "") + '">' + escapeHtml(name) + "</span>"
+      : escapeHtml(name);
+    return '<span class="name-line">' + content + "</span>";
+  }).join("");
+}
+
+function normalizeWeekRowHeights() {
+  const cards = Array.from(calendarEl.children);
+  const sectionClasses = ["a-names", "b-names", "c-names", "off-names"];
+
+  sectionClasses.forEach((sectionClass) => {
+    cards.forEach((card) => {
+      if (!(card instanceof HTMLElement)) return;
+      const section = card.querySelector("." + sectionClass);
+      if (section) section.style.minHeight = "";
+    });
+  });
+
+  for (let i = 0; i < cards.length; i += 7) {
+    const weekCards = cards.slice(i, i + 7);
+    sectionClasses.forEach((sectionClass) => {
+      let maxHeight = 0;
+      const sections = weekCards.map((card) => {
+        if (!(card instanceof HTMLElement)) return null;
+        return card.querySelector("." + sectionClass);
+      }).filter(Boolean);
+
+      sections.forEach((section) => {
+        maxHeight = Math.max(maxHeight, section.offsetHeight);
+      });
+
+      sections.forEach((section) => {
+        section.style.minHeight = maxHeight ? maxHeight + "px" : "";
+      });
+    });
+  }
 }
 
 function renderAll() {
@@ -598,6 +675,7 @@ function renderAll() {
   const safe = sanitizeYearMonth(yearEl.value, monthEl.value);
   yearEl.value = safe.year;
   monthEl.value = safe.month;
+  if (screenTitleEl) screenTitleEl.innerHTML = buildInstitutionTitleHtml(safe.year, safe.month);
 
   const personnel = state.personnel.slice();
   const stablePersonnel = getStableSortedPersonnel(personnel);
@@ -720,15 +798,48 @@ function renderAll() {
       setWeeklySide(weeklySideMap, weekKey, next, "B");
     }
 
-    while (used.size < availableNames.length + (cPerson && cPerson !== "Eksik" ? 1 : 0)) {
-      let side = "A";
-      if (aPeople.length > bPeople.length) side = "B";
-      else if (bPeople.length > aPeople.length) side = "A";
+    // Minimum kadroyu her zaman haftalik A/B kilidinin onune koy.
+    while (aPeople.length < minA) {
+      const fallback = pickFallbackCandidate(workerNames, used);
+      if (!fallback) break;
+      aPeople.push(fallback);
+      setWeeklySide(weeklySideMap, weekKey, fallback, "A");
+    }
+
+    while (bPeople.length < minB) {
+      const fallback = pickFallbackCandidate(workerNames, used);
+      if (!fallback) break;
+      bPeople.push(fallback);
+      setWeeklySide(weeklySideMap, weekKey, fallback, "B");
+    }
+
+    const totalCapacity = maxA === null || maxB === null
+      ? availableNames.length
+      : (maxA + maxB);
+
+    while ((aPeople.length + bPeople.length) < totalCapacity) {
+      let side = null;
+      const aHasRoom = maxA === null || aPeople.length < maxA;
+      const bHasRoom = maxB === null || bPeople.length < maxB;
+      if (!aHasRoom && !bHasRoom) break;
+      if (aHasRoom && !bHasRoom) side = "A";
+      else if (!aHasRoom && bHasRoom) side = "B";
+      else if (
+        (maxA === null ? aPeople.length : (aPeople.length / maxA)) <=
+        (maxB === null ? bPeople.length : (bPeople.length / maxB))
+      ) side = "A";
+      else side = "B";
 
       let next = pickNextCandidate(side === "A" ? sortedA : sortedB, used);
       if (!next) {
-        side = side === "A" ? "B" : "A";
-        next = pickNextCandidate(side === "A" ? sortedA : sortedB, used);
+        const otherSide = side === "A" ? "B" : "A";
+        const otherHasRoom = otherSide === "A"
+          ? (maxA === null || aPeople.length < maxA)
+          : (maxB === null || bPeople.length < maxB);
+        if (otherHasRoom) {
+          side = otherSide;
+          next = pickNextCandidate(side === "A" ? sortedA : sortedB, used);
+        }
       }
       if (!next) break;
 
@@ -741,11 +852,41 @@ function renderAll() {
       }
     }
 
+    // Izinli olmayan kimse kapasite varken bos kalmasin.
+    let remainingAvailable = availableNames.filter((name) => !used.has(name));
+    while (remainingAvailable.length) {
+      const aHasRoom = maxA === null || aPeople.length < maxA;
+      const bHasRoom = maxB === null || bPeople.length < maxB;
+      if (!aHasRoom && !bHasRoom) break;
+
+      const next = remainingAvailable.shift();
+      if (!next) break;
+      used.add(next);
+
+      if (aHasRoom && bHasRoom) {
+        if (aPeople.length <= bPeople.length) {
+          aPeople.push(next);
+          setWeeklySide(weeklySideMap, weekKey, next, "A");
+        } else {
+          bPeople.push(next);
+          setWeeklySide(weeklySideMap, weekKey, next, "B");
+        }
+      } else if (aHasRoom) {
+        aPeople.push(next);
+        setWeeklySide(weeklySideMap, weekKey, next, "A");
+      } else {
+        bPeople.push(next);
+        setWeeklySide(weeklySideMap, weekKey, next, "B");
+      }
+    }
+
     while (aPeople.length < minA) aPeople.push("Eksik");
     while (bPeople.length < minB) bPeople.push("Eksik");
 
     const assignedNames = new Set([...aPeople, ...bPeople, cPerson].filter((name) => name && name !== "Eksik"));
-    const offList = allNames.filter((name) => !assignedNames.has(name));
+    let plannedOffList = allNames.filter((name) => leaveSet.has(name) && !assignedNames.has(name));
+    let extraOffList = allNames.filter((name) => !assignedNames.has(name) && !leaveSet.has(name));
+    let offList = [...plannedOffList, ...extraOffList];
 
     dailyPlans.push({
       d,
@@ -755,9 +896,13 @@ function renderAll() {
       aPeople: aPeople.slice(),
       bPeople: bPeople.slice(),
       cPerson,
+      plannedOffList: plannedOffList.slice(),
+      extraOffList: extraOffList.slice(),
       offList: offList.slice()
     });
   }
+
+  rebalanceComparableGroups(dailyPlans, personnelMap);
 
   for (let i = 0; i < lead; i += 1) {
     printWeekCells.push('<td class="' + (i >= 5 ? "weekend-cell" : "") + '"><div class="day empty"></div></td>');
@@ -772,16 +917,16 @@ function renderAll() {
     if (plan.isWeekend) weekendCount += 1;
 
     assignedNames.forEach((name) => {
-      if (personHours[name] !== undefined) personHours[name] += 8;
-      if (personDayStatus[name]) personDayStatus[name].push("work");
       personStats[name].work += 1;
       if (plan.isWeekend) personStats[name].weekendWork += 1;
+      if (personHours[name] !== undefined) personHours[name] += 8;
+      if (personDayStatus[name]) personDayStatus[name].push("work");
     });
     plan.offList.forEach((name) => {
-      if (personOffDays[name] !== undefined) personOffDays[name] += 1;
-      if (personDayStatus[name]) personDayStatus[name].push("off");
       personStats[name].off += 1;
       if (plan.isWeekend) personStats[name].weekendOff += 1;
+      if (personOffDays[name] !== undefined) personOffDays[name] += 1;
+      if (personDayStatus[name]) personDayStatus[name].push("off");
     });
     plan.aPeople.forEach((name) => {
       if (name !== "Eksik") personStats[name].a += 1;
@@ -800,15 +945,15 @@ function renderAll() {
       else card.classList.add("filtered-out");
     }
     card.innerHTML = [
-      '<div class="d">' + plan.d + '</div>',
+      '<div class="d">' + plan.d + ' - ' + dayNameTr(plan.day) + '</div>',
       '<div class="row a">A (08-16): ' + plan.aPeople.filter((name) => name !== "Eksik").length + ' kisi</div>',
-      '<div class="names">A: ' + renderNameList(plan.aPeople, selectedPersonName, "work") + '</div>',
+      '<div class="names a-names">' + renderNameList(plan.aPeople, selectedPersonName, "work") + '</div>',
       '<div class="row b">B (16-00): ' + plan.bPeople.filter((name) => name !== "Eksik").length + ' kisi</div>',
-      '<div class="names">B: ' + renderNameList(plan.bPeople, selectedPersonName, "work") + '</div>',
+      '<div class="names b-names">' + renderNameList(plan.bPeople, selectedPersonName, "work") + '</div>',
       '<div class="row c">C (00-08): 1 kisi</div>',
-      '<div class="names">C: ' + renderNameList([plan.cPerson], selectedPersonName, "work") + '</div>',
+      '<div class="names c-names">' + renderNameList([plan.cPerson], selectedPersonName, "work") + '</div>',
       '<div class="row off">Izinliler: ' + plan.offList.length + '</div>',
-      '<div class="names">Izinliler: ' + renderNameList(plan.offList, selectedPersonName, "off") + '</div>'
+      '<div class="names off-names">' + renderNameList(plan.offList, selectedPersonName, "off") + '</div>'
     ].join("");
     calendarEl.appendChild(card);
     printWeekCells.push('<td class="' + (plan.isWeekend ? "weekend-cell" : "") + '">' + card.outerHTML + "</td>");
@@ -838,6 +983,8 @@ function renderAll() {
     }
     printCalendarBodyEl.innerHTML = weekRows.join("");
   }
+
+  normalizeWeekRowHeights();
 
   const totalPersonHours = (totalA + totalB + totalC) * 8;
   const totalAssignments = totalA + totalB + totalC;

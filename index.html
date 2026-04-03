@@ -59,6 +59,43 @@
     h3 { margin: 0 0 10px; }
     .sub { color: var(--muted); margin: 0; font-size: 14px; }
 
+    .app-title {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      position: relative;
+      min-height: 112px;
+    }
+
+    .app-title-logo {
+      width: 104px;
+      height: 104px;
+      object-fit: contain;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .app-title-text {
+      width: 100%;
+      padding: 0 122px;
+      text-align: center;
+    }
+
+    .app-title-text h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.3;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .title-period {
+      color: #b91c1c;
+      font-weight: 900;
+      font-size: 1.08em;
+    }
+
     .controls {
       display: grid;
       grid-template-columns: repeat(2, minmax(160px, 1fr));
@@ -250,10 +287,10 @@
       min-height: 128px;
       border: 1px solid var(--line);
       border-radius: 10px;
-      padding: 7px;
+      padding: 6px;
       display: grid;
       grid-template-rows: auto auto auto auto;
-      gap: 5px;
+      gap: 4px;
       background: #fff;
     }
     .day.empty { border-style: dashed; background: #f8fafc; }
@@ -270,12 +307,12 @@
       border-color: #16a34a;
       box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.14);
     }
-    .day .d { font-size: 13px; font-weight: 800; }
+    .day .d { font-size: 12px; font-weight: 800; }
 
     .row {
       border-radius: 999px;
-      padding: 3px 8px;
-      font-size: 12px;
+      padding: 2px 7px;
+      font-size: 11px;
       width: fit-content;
       font-weight: 800;
     }
@@ -285,12 +322,19 @@
     .off { background: var(--off); }
 
     .names {
-      font-size: 11px;
-      line-height: 1.35;
+      font-size: 10px;
+      line-height: 1.15;
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 5px 6px;
+      padding: 4px 5px;
       background: #f8fafc;
+    }
+    .name-line {
+      display: block;
+      margin-bottom: 1px;
+    }
+    .name-line:last-child {
+      margin-bottom: 0;
     }
     .focus-name {
       display: inline-block;
@@ -328,6 +372,29 @@
       margin-bottom: 12px;
     }
 
+    .print-title-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      position: relative;
+      min-height: 96px;
+    }
+
+    .print-title-logo {
+      display: block;
+      width: 88px;
+      height: 88px;
+      object-fit: contain;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .print-title-text {
+      width: 100%;
+      padding: 0 108px;
+    }
+
     .print-calendar-table {
       display: none;
       width: 100%;
@@ -339,6 +406,7 @@
     .print-calendar-table th,
     .print-calendar-table td {
       vertical-align: top;
+      width: 14.2857%;
     }
 
     .print-calendar-table th {
@@ -357,7 +425,7 @@
     @media print {
       @page {
         size: landscape;
-        margin: 7mm;
+        margin: 6mm;
       }
 
       html,
@@ -391,8 +459,12 @@
         display: none !important;
       }
 
-      .print-calendar-table {
-        display: table;
+      .print-calendar-table.print-only {
+        display: table !important;
+        width: calc(100% + 6px);
+        margin-left: -3px;
+        margin-right: -3px;
+        border-spacing: 2px;
       }
 
       .printable-calendar {
@@ -404,12 +476,35 @@
 
       .print-title {
         display: block;
-        margin-bottom: 8px;
+        margin-bottom: 12px;
       }
 
       .print-title h3 {
         margin: 0;
-        font-size: 16px;
+        font-size: 14px;
+        letter-spacing: -0.02em;
+        text-align: center;
+        line-height: 1.35;
+        font-weight: 800;
+      }
+
+      .print-title-period {
+        color: #b91c1c;
+        font-weight: 900;
+        font-size: 1.08em;
+      }
+
+      .print-title-head {
+        min-height: 92px;
+      }
+
+      .print-title-logo {
+        width: 84px;
+        height: 84px;
+      }
+
+      .print-title-text {
+        padding: 0 102px;
       }
 
       .container {
@@ -419,24 +514,50 @@
       }
 
       .print-summary {
-        margin-top: 10px;
+        margin-top: 8px;
+        width: 100%;
         break-inside: avoid;
         page-break-inside: avoid;
       }
 
       .print-summary h3 {
-        margin: 0 0 6px;
-        font-size: 14px;
+        margin: 0 0 4px;
+        font-size: 12px;
       }
 
       .print-summary .person-table {
         margin-top: 0;
-        font-size: 10px;
+        font-size: 9px;
+        width: 100%;
+        table-layout: fixed;
       }
 
       .print-summary .person-table th,
       .print-summary .person-table td {
-        padding: 4px 5px;
+        padding: 3px 4px;
+      }
+
+      .print-summary .person-table th:nth-child(1),
+      .print-summary .person-table td:nth-child(1) {
+        width: 28%;
+      }
+
+      .print-summary .person-table th:nth-child(2),
+      .print-summary .person-table td:nth-child(2) {
+        width: 16%;
+      }
+
+      .print-summary .person-table th:nth-child(3),
+      .print-summary .person-table td:nth-child(3) {
+        width: 34%;
+      }
+
+      .print-summary .person-table th:nth-child(4),
+      .print-summary .person-table td:nth-child(4),
+      .print-summary .person-table th:nth-child(5),
+      .print-summary .person-table td:nth-child(5) {
+        width: 11%;
+        text-align: center;
       }
 
       .print-calendar-table thead {
@@ -450,9 +571,9 @@
 
       .print-calendar-table th {
         color: #334155 !important;
-        font-size: 10px;
+        font-size: 9px;
         letter-spacing: 0;
-        padding: 0 2px 4px;
+        padding: 0 3px 3px;
       }
 
       .print-calendar-table td {
@@ -460,18 +581,19 @@
       }
 
       .day {
-        min-height: 142px;
+        min-height: 108px;
         break-inside: avoid;
         page-break-inside: avoid;
         background: #fff !important;
         border-color: #cbd5e1 !important;
-        border-radius: 8px;
-        padding: 5px;
-        gap: 3px;
+        border-radius: 7px;
+        padding: 4px;
+        gap: 2px;
       }
 
       .day .d {
-        font-size: 11px;
+        font-size: 9px;
+        line-height: 1.15;
       }
 
       .day.empty {
@@ -479,8 +601,8 @@
       }
 
       .row {
-        padding: 2px 6px;
-        font-size: 10px;
+        padding: 1px 5px;
+        font-size: 8px;
         border-radius: 999px;
       }
 
@@ -503,10 +625,29 @@
       .names {
         background: #f8fafc !important;
         border-color: #cbd5e1 !important;
-        font-size: 9px;
-        line-height: 1.25;
-        padding: 4px 5px;
-        border-radius: 7px;
+        font-size: 7.5px;
+        line-height: 1.15;
+        padding: 3px 4px;
+        border-radius: 6px;
+      }
+
+      .name-line {
+        margin-bottom: 0;
+      }
+
+      .focus-name,
+      .focus-name.off {
+        padding: 0 4px;
+        font-size: inherit;
+      }
+
+      .print-summary .person-table thead {
+        display: table-header-group;
+      }
+
+      .print-summary .person-table tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
 
       button {
@@ -523,14 +664,36 @@
       .person-form { grid-template-columns: 1fr; }
       .day { min-height: 142px; }
       .leave-info-grid { grid-template-columns: 1fr; }
+      .app-title {
+        min-height: 0;
+      }
+      .app-title-logo {
+        position: static;
+        width: 72px;
+        height: 72px;
+      }
+      .app-title-text {
+        padding: 0;
+      }
+      .app-title {
+        gap: 10px;
+        align-items: center;
+      }
+      .app-title-text h1 {
+        font-size: 16px;
+      }
     }
   </style>
 </head>
 <body>
   <div class="container">
     <section class="panel print-hide">
-      <h1>Vardiya Hesaplama Takvimi</h1>
-      <p class="sub">Personel bilgilerini gir, tipi sec; vardiyalar isimlere gore otomatik hesaplanir.</p>
+      <div class="app-title">
+        <img class="app-title-logo" src="logo.png" alt="Logo">
+        <div class="app-title-text">
+          <h1 id="screenTitle">Vardiya Hesaplama Takvimi</h1>
+        </div>
+      </div>
     </section>
 
     <section class="panel print-hide">
@@ -607,7 +770,7 @@
         <div class="rule"><strong>Sef:</strong> Sadece hafta ici A vardiyasinda calisir. Hafta sonu izinlidir.</div>
         <div class="rule"><strong>Gececi:</strong> 6 gun calisir, 2 gun izin yapar. C vardiyasi her gun 1 kisidir.</div>
         <div class="rule"><strong>Yedek gececi:</strong> Normalde A vardiyasindadir. Gececi yerine 2 gece nobet tuttugunda ertesi gun izin yapar.</div>
-        <div class="rule"><strong>Dagitim:</strong> Normal personel haftalik A/B doner. Izin modeli kisi bazli uygulanir ve ayni modelde denge korunur.</div>
+        <div class="rule"><strong>Dagitim:</strong> Hafta ici A 7-8, B 3-7, C 1 kisidir. Hafta sonu A en az 3, B en az 3, C 1 kisidir.</div>
         <div class="rule-title">Izin Modelleri</div>
         <div class="leave-info-grid">
           <div class="leave-info-card">
@@ -638,7 +801,12 @@
 
     <section class="panel printable-calendar">
       <div class="print-title">
-        <h3 id="printTitle">Vardiya Takvimi</h3>
+        <div class="print-title-head">
+          <img class="print-title-logo" src="logo.png" alt="Logo">
+          <div class="print-title-text">
+            <h3 id="printTitle">Vardiya Takvimi</h3>
+          </div>
+        </div>
       </div>
       <div class="calendar-head screen-calendar">
         <div>Pzt</div><div>Sal</div><div>Car</div><div>Per</div><div>Cum</div><div>Cmt</div><div>Paz</div>
