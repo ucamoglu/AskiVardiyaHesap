@@ -10,7 +10,7 @@ const DEFAULT_PERSONNEL = [
   { id: "p8", gender: "K", name: "Nurten AKTAR", type: "normal", leaveMode: "telafi" },
   { id: "p9", gender: "E", name: "Uğur SAYAN", type: "normal", leaveMode: "telafi" },
   { id: "p10", gender: "K", name: "Raziye DALKIRAN", type: "normal", leaveMode: "telafi" },
-  { id: "p11", gender: "K", name: "Habibe SARIKAYA", type: "normal", leaveMode: "telafi" },
+  { id: "p11", gender: "K", name: "Habibe SARIKAYA", type: "normal", leaveMode: "weekend_only" },
   { id: "p12", gender: "K", name: "Beyhan ÇELİK", type: "normal", leaveMode: "weekend_only" },
   { id: "p13", gender: "E", name: "Mehmet BALCI", type: "yedek_gececi", leaveMode: "weekend_only" },
   { id: "p14", gender: "E", name: "Mehmet ÜNLÜ", type: "normal", leaveMode: "weekend_only" },
@@ -22,6 +22,11 @@ const DEFAULT_PERSONNEL_BY_ID = Object.fromEntries(DEFAULT_PERSONNEL.map((person
 
 const yearEl = document.getElementById("year");
 const monthEl = document.getElementById("month");
+const yearDownBtn = document.getElementById("yearDown");
+const yearUpBtn = document.getElementById("yearUp");
+const monthDownBtn = document.getElementById("monthDown");
+const monthUpBtn = document.getElementById("monthUp");
+const leaveModeFilterEl = document.getElementById("leaveModeFilter");
 const calendarEl = document.getElementById("calendar");
 const statsEl = document.getElementById("stats");
 const warningsEl = document.getElementById("warnings");
@@ -52,6 +57,15 @@ let state = { year: 0, month: 0, personnel: [] };
 let editingId = null;
 let selectedPersonName = null;
 
+function getDefaultState() {
+  const now = new Date();
+  return {
+    year: now.getFullYear(),
+    month: now.getMonth() + 1,
+    personnel: DEFAULT_PERSONNEL.slice()
+  };
+}
+
 const LEAVE_MODE_RULES = {
   telafi: {
     label: "Donusum + 2 Telafi",
@@ -73,6 +87,11 @@ const PERSON_TYPE_LABELS = {
   gececi: "Gececi",
   yedek_gececi: "Yedek Gececi"
 };
+
+const PLAN_REFERENCE_START = new Date(2026, 2, 1);
+PLAN_REFERENCE_START.setHours(0, 0, 0, 0);
+const TELAFI_REFERENCE_WEEK_START = new Date(2026, 2, 30);
+TELAFI_REFERENCE_WEEK_START.setHours(0, 0, 0, 0);
 
 function monthDayCount(y, m) {
   return new Date(y, m, 0).getDate();
@@ -105,6 +124,21 @@ function formatLocalDateKey(date) {
     String(date.getMonth() + 1).padStart(2, "0"),
     String(date.getDate()).padStart(2, "0")
   ].join("-");
+}
+
+function isSameMonth(date, year, month) {
+  return date.getFullYear() === year && (date.getMonth() + 1) === month;
+}
+
+function getPlanningRange(year, month) {
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month - 1, monthDayCount(year, month));
+  const planningStart = monthStart < PLAN_REFERENCE_START
+    ? new Date(monthStart)
+    : new Date(PLAN_REFERENCE_START);
+  planningStart.setHours(0, 0, 0, 0);
+  monthEnd.setHours(0, 0, 0, 0);
+  return { planningStart, monthEnd };
 }
 
 function getWeekKey(date) {
@@ -168,10 +202,9 @@ function saveState() {
 }
 
 function loadState() {
-  const now = new Date();
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    state = { year: now.getFullYear(), month: now.getMonth() + 1, personnel: DEFAULT_PERSONNEL.slice() };
+    state = getDefaultState();
   } else {
     try {
       const parsed = JSON.parse(raw);
@@ -187,15 +220,18 @@ function loadState() {
           name: shouldReplaceStoredName(person.name, DEFAULT_PERSONNEL_BY_ID[person.id]?.name || person.name)
             ? (DEFAULT_PERSONNEL_BY_ID[person.id]?.name || person.name)
             : person.name,
-          leaveMode: person.leaveMode || "telafi"
+          leaveMode: person.id === "p11"
+            ? "weekend_only"
+            : (person.leaveMode || "telafi")
         }))
       };
     } catch (err) {
-      state = { year: now.getFullYear(), month: now.getMonth() + 1, personnel: DEFAULT_PERSONNEL.slice() };
+      state = getDefaultState();
     }
   }
-  yearEl.value = state.year;
-  monthEl.value = state.month;
+  if (yearEl) yearEl.value = String(state.year);
+  if (monthEl) monthEl.value = String(state.month);
+  if (leaveModeFilterEl && !leaveModeFilterEl.value) leaveModeFilterEl.value = "all";
 }
 
 function findById(id) {
@@ -203,13 +239,12 @@ function findById(id) {
 }
 
 function renderPersonnelTable() {
+  if (!personTableBody) return;
   personTableBody.innerHTML = state.personnel.map((p, i) => `
     <tr>
       <td>${i + 1}</td>
       <td>${p.gender === "E" ? "Erkek" : "Kadin"}</td>
       <td>${p.name}</td>
-      <td>${p.type}</td>
-      <td>${labelForLeaveMode(p.leaveMode)}</td>
       <td>
         <button class="mini-btn mini-edit" type="button" data-edit="${p.id}">Duzenle</button>
         <button class="mini-btn mini-del" type="button" data-del="${p.id}">Sil</button>
@@ -345,37 +380,102 @@ function getOfficialHolidayLabel(date) {
   return movable2026[key] || "";
 }
 
-function buildNightPlan(days, y, m, gececiName, yedekName) {
+function buildNightPlan(startDate, endDate, gececiName, yedekName) {
   const cAssignments = {};
   const forcedOff = {};
-  if (!gececiName) return { cAssignments, forcedOff };
+  const yedekNightDates = [];
+  if (!gececiName) return { cAssignments, forcedOff, yedekNightDates };
 
-  for (let day = 1; day <= days; day += 1) {
-    const date = new Date(y, m - 1, day);
+  for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
     const cyclePosition = ((getDaySerial(date) % 8) + 8) % 8;
     const isNightOff = cyclePosition === 6 || cyclePosition === 7;
+    const dateKey = formatLocalDateKey(date);
 
     if (isNightOff) {
-      cAssignments[day] = yedekName || "Eksik";
-      forcedOff[day] = forcedOff[day] || [];
-      forcedOff[day].push(gececiName);
-
-      if (yedekName && cyclePosition === 7 && day + 1 <= days) {
-        forcedOff[day + 1] = forcedOff[day + 1] || [];
-        forcedOff[day + 1].push(yedekName);
-      }
+      cAssignments[dateKey] = yedekName || "Eksik";
+      if (yedekName) yedekNightDates.push(dateKey);
+      forcedOff[dateKey] = forcedOff[dateKey] || [];
+      forcedOff[dateKey].push(gececiName);
     } else {
-      cAssignments[day] = gececiName;
+      cAssignments[dateKey] = gececiName;
     }
   }
 
-  return { cAssignments, forcedOff };
+  return { cAssignments, forcedOff, yedekNightDates };
 }
 
-function addOffDay(targetMap, day, name) {
-  if (day < 1) return;
-  targetMap[day] = targetMap[day] || [];
-  if (!targetMap[day].includes(name)) targetMap[day].push(name);
+function addOffDay(targetMap, date, name) {
+  const dateKey = typeof date === "string" ? date : formatLocalDateKey(date);
+  targetMap[dateKey] = targetMap[dateKey] || [];
+  if (!targetMap[dateKey].includes(name)) targetMap[dateKey].push(name);
+}
+
+function removeOffDay(targetMap, date, name) {
+  const dateKey = typeof date === "string" ? date : formatLocalDateKey(date);
+  if (!targetMap[dateKey]) return;
+  targetMap[dateKey] = targetMap[dateKey].filter((item) => item !== name);
+  if (!targetMap[dateKey].length) delete targetMap[dateKey];
+}
+
+function hasOffDay(targetMap, date, name) {
+  const dateKey = typeof date === "string" ? date : formatLocalDateKey(date);
+  return (targetMap[dateKey] || []).includes(name);
+}
+
+function findNextAvailableExtraOffDate(startDate, endDate, yedekName, cAssignments, weekendOff, extraOff) {
+  for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+    const dateKey = formatLocalDateKey(date);
+    if (cAssignments[dateKey] === yedekName) continue;
+    if (hasOffDay(weekendOff, dateKey, yedekName)) continue;
+    if (hasOffDay(extraOff, dateKey, yedekName)) continue;
+    return new Date(date);
+  }
+  return null;
+}
+
+function buildYedekGececiExtraOff(startDate, endDate, yedekName, cAssignments, weekendOff) {
+  const extraOff = {};
+  if (!yedekName) return extraOff;
+
+  let pendingNightCount = 0;
+
+  for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+    const dateKey = formatLocalDateKey(date);
+    const workedNight = cAssignments[dateKey] === yedekName;
+    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+    const lostPlannedWeekendOff = isWeekend && workedNight && hasOffDay(weekendOff, dateKey, yedekName);
+
+    if (lostPlannedWeekendOff) {
+      removeOffDay(weekendOff, dateKey, yedekName);
+      const shiftedOffDate = findNextAvailableExtraOffDate(
+        new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1),
+        endDate,
+        yedekName,
+        cAssignments,
+        weekendOff,
+        extraOff
+      );
+      if (shiftedOffDate) addOffDay(extraOff, shiftedOffDate, yedekName);
+    }
+
+    if (!workedNight) continue;
+
+    pendingNightCount += 1;
+    if (pendingNightCount < 2) continue;
+
+    const rewardDate = findNextAvailableExtraOffDate(
+      new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1),
+      endDate,
+      yedekName,
+      cAssignments,
+      weekendOff,
+      extraOff
+    );
+    if (rewardDate) addOffDay(extraOff, rewardDate, yedekName);
+    pendingNightCount = 0;
+  }
+
+  return extraOff;
 }
 
 function getComparableAssignmentGroup(person) {
@@ -386,68 +486,56 @@ function getComparableAssignmentGroup(person) {
   return null;
 }
 
-function buildWeekendSchedules(personnel, days, y, m) {
+function buildWeekendSchedules(personnel, startDate, endDate) {
   const weekendOff = {};
-  const telafiOff = {};
-  const monthStart = new Date(y, m - 1, 1);
-  const monthEnd = new Date(y, m - 1, days);
-  const firstRelevantWeekStart = startOfWeek(monthStart);
-  const lastRelevantWeekStart = startOfWeek(monthEnd);
-  const weekendBlocks = [];
-  for (let weekStart = new Date(firstRelevantWeekStart); weekStart <= lastRelevantWeekStart; weekStart.setDate(weekStart.getDate() + 7)) {
-    const monday = new Date(weekStart);
-    const tuesday = new Date(weekStart);
-    tuesday.setDate(tuesday.getDate() + 1);
-    const saturday = new Date(weekStart);
-    saturday.setDate(saturday.getDate() + 5);
-    const sunday = new Date(saturday);
-    sunday.setDate(sunday.getDate() + 1);
-    weekendBlocks.push({
-      monday,
-      tuesday,
-      saturday,
-      sunday
-    });
-  }
+  const telafiWeekNeeds = {};
 
   const eligible = getStableSortedPersonnel(
     personnel.filter((person) => person.type === "normal" || person.type === "yedek_gececi")
   );
-  const grouped = {};
-  eligible.forEach((person) => {
-    if (person.leaveMode === "none") return;
-    const groupKey = `${person.type}:${person.leaveMode}`;
-    grouped[groupKey] = grouped[groupKey] || [];
-    grouped[groupKey].push(person);
+  const telafiPeople = eligible.filter((person) => person.leaveMode === "telafi");
+  const weekendOnlyPeople = eligible.filter((person) => person.leaveMode === "weekend_only");
+
+  const firstRelevantWeekStart = startOfWeek(PLAN_REFERENCE_START);
+  const lastRelevantWeekStart = startOfWeek(endDate);
+  const telafiGroupMap = buildTelafiGroupMap(personnel);
+
+  telafiPeople.forEach((person) => {
+    const phase = telafiGroupMap[person.name] || 0;
+    let blockIndex = 0;
+    for (let weekStart = new Date(startOfWeek(TELAFI_REFERENCE_WEEK_START)); weekStart <= lastRelevantWeekStart; weekStart.setDate(weekStart.getDate() + 7), blockIndex += 1) {
+      const isWeekendOffWeek = (blockIndex + phase) % 2 === 0;
+      const saturday = new Date(weekStart);
+      saturday.setDate(saturday.getDate() + 5);
+      const sunday = new Date(saturday);
+      sunday.setDate(sunday.getDate() + 1);
+      const weekKey = formatLocalDateKey(weekStart);
+
+      if (isWeekendOffWeek) {
+        telafiWeekNeeds[weekKey] = telafiWeekNeeds[weekKey] || {};
+        telafiWeekNeeds[weekKey][person.name] = 2;
+        if (saturday >= startDate && saturday <= endDate) addOffDay(weekendOff, saturday, person.name);
+        if (sunday >= startDate && sunday <= endDate) addOffDay(weekendOff, sunday, person.name);
+      }
+    }
   });
 
-  Object.entries(grouped).forEach(([groupKey, groupPeople]) => {
-    groupPeople.forEach((person, index) => {
-      const phaseBase = index % 2;
-      const phase = person.leaveMode === "telafi" ? (phaseBase + 1) % 2 : phaseBase;
-
-      weekendBlocks.forEach((block, blockIndex) => {
-        const weekendOffWeek = (blockIndex % 2) === phase;
-
-        if (person.leaveMode === "telafi") {
-          if (weekendOffWeek) {
-            if (block.saturday.getMonth() === m - 1 && block.saturday.getFullYear() === y) addOffDay(weekendOff, block.saturday.getDate(), person.name);
-            if (block.sunday.getMonth() === m - 1 && block.sunday.getFullYear() === y) addOffDay(weekendOff, block.sunday.getDate(), person.name);
-          } else {
-            if (block.monday.getMonth() === m - 1 && block.monday.getFullYear() === y) addOffDay(telafiOff, block.monday.getDate(), person.name);
-            if (block.tuesday.getMonth() === m - 1 && block.tuesday.getFullYear() === y) addOffDay(telafiOff, block.tuesday.getDate(), person.name);
-          }
-        }
-
-        if (person.leaveMode === "weekend_only" && weekendOffWeek) {
-          if (block.saturday.getMonth() === m - 1 && block.saturday.getFullYear() === y) addOffDay(weekendOff, block.saturday.getDate(), person.name);
-          if (block.sunday.getMonth() === m - 1 && block.sunday.getFullYear() === y) addOffDay(weekendOff, block.sunday.getDate(), person.name);
-        }
-      });
-    });
+  weekendOnlyPeople.forEach((person, index) => {
+    const phase = index % 2;
+    let blockIndex = 0;
+    for (let weekStart = new Date(firstRelevantWeekStart); weekStart <= lastRelevantWeekStart; weekStart.setDate(weekStart.getDate() + 7), blockIndex += 1) {
+      const weekendOffWeek = (blockIndex % 2) === phase;
+      if (!weekendOffWeek) continue;
+      const saturday = new Date(weekStart);
+      saturday.setDate(saturday.getDate() + 5);
+      const sunday = new Date(saturday);
+      sunday.setDate(sunday.getDate() + 1);
+      if (saturday >= startDate && saturday <= endDate) addOffDay(weekendOff, saturday, person.name);
+      if (sunday >= startDate && sunday <= endDate) addOffDay(weekendOff, sunday, person.name);
+    }
   });
 
-  return { weekendOff, telafiOff };
+  return { weekendOff, telafiWeekNeeds };
 }
 
 function takeFromPool(pool, count, used) {
@@ -473,15 +561,88 @@ function getShiftBounds(isWeekend) {
     : { minA: 7, maxA: 8, minB: 3, maxB: 7 };
 }
 
-function sortCandidates(names, side, stats, personIndex, weekSerial, isWeekend, personnelMap) {
+function buildTelafiGroupMap(personnel) {
+  const telafiPeople = getStableSortedPersonnel(
+    personnel.filter((person) => person.type === "normal" && person.leaveMode === "telafi")
+  );
+  const splitIndex = Math.ceil(telafiPeople.length / 2);
+  const groupMap = {};
+
+  telafiPeople.forEach((person, index) => {
+    groupMap[person.name] = index < splitIndex ? 0 : 1;
+  });
+
+  return groupMap;
+}
+
+function buildTelafiSideMap(personnel, startDate, endDate, weekendOff) {
+  const telafiPeople = getStableSortedPersonnel(
+    personnel.filter((person) => person.type === "normal" && person.leaveMode === "telafi")
+  );
+  const sideMap = {};
+  const telafiGroupMap = buildTelafiGroupMap(personnel);
+  const currentSideByPerson = {};
+
+  telafiPeople.forEach((person) => {
+    currentSideByPerson[person.name] = (telafiGroupMap[person.name] || 0) === 0 ? "A" : "B";
+  });
+
+  for (let weekStart = new Date(startOfWeek(startDate)); weekStart <= endDate; weekStart.setDate(weekStart.getDate() + 7)) {
+    const saturday = new Date(weekStart);
+    saturday.setDate(saturday.getDate() + 5);
+    const sunday = new Date(saturday);
+    sunday.setDate(sunday.getDate() + 1);
+    const saturdayOff = new Set(weekendOff[formatLocalDateKey(saturday)] || []);
+    const sundayOff = new Set(weekendOff[formatLocalDateKey(sunday)] || []);
+    const weekKey = formatLocalDateKey(weekStart);
+
+    telafiPeople.forEach((person) => {
+      const hasWeekendOff = saturdayOff.has(person.name) || sundayOff.has(person.name);
+      sideMap[`${weekKey}|${person.name}`] = currentSideByPerson[person.name] || "A";
+      if (hasWeekendOff) {
+        currentSideByPerson[person.name] = currentSideByPerson[person.name] === "A" ? "B" : "A";
+      }
+    });
+  }
+
+  return sideMap;
+}
+
+function getPreferredSide(person, lastWorkedWeekSide, name, weekKey, weekendOnlySideMap, telafiSideMap) {
+  if (!person) return null;
+  if (person.type === "sef" || person.type === "yedek_gececi") return "A";
+  if (person.type !== "normal") return null;
+  if (person.leaveMode === "telafi") {
+    return telafiSideMap?.[`${weekKey}|${name}`] || "A";
+  }
+  if (person.leaveMode === "weekend_only") {
+    return weekendOnlySideMap?.[`${weekKey}|${name}`] || "A";
+  }
+  const weekStart = typeof weekKey === "string" ? new Date(weekKey) : startOfWeek(weekKey);
+  const referenceWeekStart = startOfWeek(PLAN_REFERENCE_START);
+  const weekSerial = Math.floor((weekStart.getTime() - referenceWeekStart.getTime()) / (7 * 24 * 60 * 60 * 1000));
+  const stableOrder = getStableOrderValue(person);
+  return ((weekSerial + stableOrder) % 2 === 0) ? "A" : "B";
+}
+
+function matchesPreferredSide(personnelMap, lastWorkedWeekSide, name, side, weekKey, weekendOnlySideMap, telafiSideMap) {
+  const preferredSide = getPreferredSide(personnelMap[name], lastWorkedWeekSide, name, weekKey, weekendOnlySideMap, telafiSideMap);
+  return !preferredSide || preferredSide === side;
+}
+
+function hasStrictWeeklySide(person) {
+  return person?.type === "normal" && (person?.leaveMode === "weekend_only" || person?.leaveMode === "telafi");
+}
+
+function sortCandidates(names, side, stats, lastWorkedWeekSide, isWeekend, personnelMap, weekKey, weekendOnlySideMap, telafiSideMap) {
   const uniqueNames = Array.from(new Set(names));
   return uniqueNames.sort((left, right) => {
     const leftPerson = personnelMap[left];
     const rightPerson = personnelMap[right];
-    const leftPrefA = leftPerson && (leftPerson.type === "yedek_gececi" || (leftPerson.type === "normal" && ((personIndex[left] + weekSerial) % 2 === 0)));
-    const rightPrefA = rightPerson && (rightPerson.type === "yedek_gececi" || (rightPerson.type === "normal" && ((personIndex[right] + weekSerial) % 2 === 0)));
-    const leftPreferred = side === "A" ? leftPrefA : !leftPrefA;
-    const rightPreferred = side === "A" ? rightPrefA : !rightPrefA;
+    const leftPreferredSide = getPreferredSide(leftPerson, lastWorkedWeekSide, left, weekKey, weekendOnlySideMap, telafiSideMap);
+    const rightPreferredSide = getPreferredSide(rightPerson, lastWorkedWeekSide, right, weekKey, weekendOnlySideMap, telafiSideMap);
+    const leftPreferred = leftPreferredSide ? leftPreferredSide === side : false;
+    const rightPreferred = rightPreferredSide ? rightPreferredSide === side : false;
     if (leftPreferred !== rightPreferred) return leftPreferred ? -1 : 1;
 
     const leftGroup = getComparableAssignmentGroup(leftPerson);
@@ -523,6 +684,12 @@ function pickFallbackCandidate(names, used) {
   return null;
 }
 
+function pickCandidateForWeekendBalance(preferredCandidates, fallbackNames, used) {
+  const preferred = pickNextCandidate(preferredCandidates, used);
+  if (preferred) return preferred;
+  return pickFallbackCandidate(fallbackNames, used);
+}
+
 function getWeeklySide(weeklySideMap, weekKey, name) {
   return weeklySideMap[`${weekKey}|${name}`] || null;
 }
@@ -530,6 +697,91 @@ function getWeeklySide(weeklySideMap, weekKey, name) {
 function setWeeklySide(weeklySideMap, weekKey, name, side) {
   if (!name || name === "Eksik") return;
   weeklySideMap[`${weekKey}|${name}`] = side;
+}
+
+function getRemainingWeekdaysInWeek(date) {
+  const day = date.getDay();
+  if (day === 0 || day === 6) return 0;
+  return 6 - day;
+}
+
+function getRemainingTelafiAvailability(currentDate, personName, cAssignments, nightRecoveryOff) {
+  let availableDays = 0;
+  for (let date = new Date(currentDate); date.getDay() !== 6; date.setDate(date.getDate() + 1)) {
+    const day = date.getDay();
+    if (day === 0 || day === 6) continue;
+    const dateKey = formatLocalDateKey(date);
+    if ((nightRecoveryOff[dateKey] || []).includes(personName)) continue;
+    if (cAssignments[dateKey] === personName) continue;
+    availableDays += 1;
+  }
+  return availableDays;
+}
+
+function getRemainingTelafiAvailabilityInMonth(currentDate, personName, cAssignments, nightRecoveryOff) {
+  let availableDays = 0;
+  const targetMonth = currentDate.getMonth();
+  for (let date = new Date(currentDate); date.getMonth() === targetMonth; date.setDate(date.getDate() + 1)) {
+    const day = date.getDay();
+    if (day === 0 || day === 6) continue;
+    const dateKey = formatLocalDateKey(date);
+    if ((nightRecoveryOff[dateKey] || []).includes(personName)) continue;
+    if (cAssignments[dateKey] === personName) continue;
+    availableDays += 1;
+  }
+  return availableDays;
+}
+
+function getWeekdayOffsetFromWeekStart(date) {
+  const weekStart = startOfWeek(date);
+  return Math.floor((new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() - weekStart.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function buildTelafiWeekdayPairMap(personnel) {
+  const telafiPeople = getStableSortedPersonnel(
+    personnel.filter((person) => person.type === "normal" && person.leaveMode === "telafi")
+  );
+  const pairSlots = [
+    [0, 1], // Pazartesi-Sali
+    [3, 4]  // Persembe-Cuma
+  ];
+  const pairMap = {};
+  telafiPeople.forEach((person, index) => {
+    const groupIndex = Math.floor(index / 2);
+    pairMap[person.name] = pairSlots[groupIndex % pairSlots.length];
+  });
+  return pairMap;
+}
+
+function buildWeekendOnlySideMap(personnel, startDate, endDate, weekendOff) {
+  const weekendOnlyPeople = getStableSortedPersonnel(
+    personnel.filter((person) => person.type === "normal" && person.leaveMode === "weekend_only")
+  );
+  const sideMap = {};
+
+  for (let weekStart = new Date(startOfWeek(startDate)); weekStart <= endDate; weekStart.setDate(weekStart.getDate() + 7)) {
+    const saturday = new Date(weekStart);
+    saturday.setDate(saturday.getDate() + 5);
+    const sunday = new Date(saturday);
+    sunday.setDate(sunday.getDate() + 1);
+    const saturdayOff = new Set(weekendOff[formatLocalDateKey(saturday)] || []);
+    const sundayOff = new Set(weekendOff[formatLocalDateKey(sunday)] || []);
+    const weekKey = formatLocalDateKey(weekStart);
+
+    weekendOnlyPeople.forEach((person) => {
+      const hasWeekendOff = saturdayOff.has(person.name) || sundayOff.has(person.name);
+      sideMap[`${weekKey}|${person.name}`] = hasWeekendOff ? "B" : "A";
+    });
+  }
+
+  return sideMap;
+}
+
+function rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, name, side) {
+  if (!name || name === "Eksik") return;
+  const person = personnelMap[name];
+  if (!person || person.type !== "normal") return;
+  lastWorkedWeekSide[name] = side;
 }
 
 function getPlanSideForPerson(plan, name) {
@@ -601,6 +853,24 @@ function clearSelectedPerson() {
   renderAll();
 }
 
+function adjustYearMonth(deltaYear, deltaMonth) {
+  const safe = sanitizeYearMonth(yearEl?.value, monthEl?.value);
+  const date = new Date(safe.year, safe.month - 1, 1);
+  date.setFullYear(date.getFullYear() + deltaYear);
+  date.setMonth(date.getMonth() + deltaMonth);
+  if (yearEl) yearEl.value = date.getFullYear();
+  if (monthEl) monthEl.value = date.getMonth() + 1;
+  saveState();
+  renderAll();
+}
+
+function ensureBootstrapDefaults() {
+  const safe = sanitizeYearMonth(yearEl?.value, monthEl?.value);
+  if (yearEl && !yearEl.value) yearEl.value = String(safe.year);
+  if (monthEl && !monthEl.value) monthEl.value = String(safe.month);
+  if (leaveModeFilterEl && !leaveModeFilterEl.value) leaveModeFilterEl.value = "all";
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -608,6 +878,15 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function getVisibleNamesForFilter(personnel, leaveModeFilter) {
+  if (!leaveModeFilter || leaveModeFilter === "all") return new Set(personnel.map((person) => person.name));
+  return new Set(
+    personnel
+      .filter((person) => person.leaveMode === leaveModeFilter)
+      .map((person) => person.name)
+  );
 }
 
 function renderNameList(names, focusedName, mode) {
@@ -660,7 +939,7 @@ function renderAll() {
   if (screenTitleEl) screenTitleEl.innerHTML = buildInstitutionTitleHtml(safe.year, safe.month);
 
   const personnel = state.personnel.slice();
-  const stablePersonnel = getStableSortedPersonnel(personnel);
+  const leaveModeFilter = leaveModeFilterEl?.value || "all";
   const totalPersonnel = personnel.length;
   const maleCount = personnel.filter((p) => p.gender === "E").length;
   const femaleCount = personnel.filter((p) => p.gender === "K").length;
@@ -668,9 +947,11 @@ function renderAll() {
   const gececi = personnel.find((p) => p.type === "gececi");
   const yedek = personnel.find((p) => p.type === "yedek_gececi");
   const allNames = personnel.map((p) => p.name);
+  const visibleNames = getVisibleNamesForFilter(personnel, leaveModeFilter);
+  const filterHasSelection = leaveModeFilter !== "all";
   if (selectedPersonName && !allNames.includes(selectedPersonName)) selectedPersonName = null;
-  const personIndex = Object.fromEntries(stablePersonnel.map((person, i) => [person.name, i]));
   const personnelMap = Object.fromEntries(personnel.map((person) => [person.name, person]));
+  const telafiWeekdayPairMap = buildTelafiWeekdayPairMap(personnel);
   const warnings = [];
   if (!sef) warnings.push("Tam 1 sef tanimlamalisin.");
   if (!gececi) warnings.push("1 gececi tanimlamalisin.");
@@ -696,8 +977,15 @@ function renderAll() {
   const days = monthDayCount(y, m);
   const first = new Date(y, m - 1, 1);
   const lead = mondayFirstIndex(first);
-  const { cAssignments, forcedOff: nightRecoveryOff } = buildNightPlan(days, y, m, gececi.name, yedek.name);
-  const { weekendOff, telafiOff } = buildWeekendSchedules(personnel, days, y, m);
+  const { planningStart, monthEnd } = getPlanningRange(y, m);
+  const { cAssignments, forcedOff: nightRecoveryOff } = buildNightPlan(planningStart, monthEnd, gececi.name, yedek.name);
+  const { weekendOff, telafiWeekNeeds } = buildWeekendSchedules(personnel, planningStart, monthEnd);
+  const yedekExtraOff = buildYedekGececiExtraOff(planningStart, monthEnd, yedek.name, cAssignments, weekendOff);
+  const telafiSideMap = buildTelafiSideMap(personnel, planningStart, monthEnd, weekendOff);
+  const weekendOnlySideMap = buildWeekendOnlySideMap(personnel, planningStart, monthEnd, weekendOff);
+  const telafiRemainingByWeek = Object.fromEntries(
+    Object.entries(telafiWeekNeeds).map(([weekKey, people]) => [weekKey, { ...people }])
+  );
   const personHours = Object.fromEntries(allNames.map((name) => [name, 0]));
   const personOffDays = Object.fromEntries(allNames.map((name) => [name, 0]));
   const personDayStatus = Object.fromEntries(allNames.map((name) => [name, []]));
@@ -718,6 +1006,7 @@ function renderAll() {
   let weekendCount = 0;
   const printWeekCells = [];
   const weeklySideMap = {};
+  const lastWorkedWeekSide = {};
   const dailyPlans = [];
 
   for (let i = 0; i < lead; i += 1) {
@@ -726,18 +1015,55 @@ function renderAll() {
     calendarEl.appendChild(empty);
   }
 
-  for (let d = 1; d <= days; d += 1) {
-    const date = new Date(y, m - 1, d);
+  for (let date = new Date(planningStart); date <= monthEnd; date.setDate(date.getDate() + 1)) {
+    const planDate = new Date(date);
+    const d = planDate.getDate();
     const day = date.getDay();
     const isWeekend = day === 0 || day === 6;
     const holidayLabel = getOfficialHolidayLabel(date);
     const weekKey = getWeekKey(date);
-    const weekSerial = getWeekSerial(date);
+    const dateKey = formatLocalDateKey(date);
     const { minA, maxA, minB, maxB } = getShiftBounds(isWeekend);
-    const cNeed = 1;
-    const cPerson = cAssignments[d] || "Eksik";
-    const hardOffSet = new Set(nightRecoveryOff[d] || []);
-    const softOffSet = new Set(isWeekend ? (weekendOff[d] || []) : (telafiOff[d] || []));
+    const cPerson = cAssignments[dateKey] || "Eksik";
+    const hardOffSet = new Set(nightRecoveryOff[dateKey] || []);
+    let scheduledTelafi = [];
+    if (!isWeekend) {
+      const telafiWeekState = telafiRemainingByWeek[weekKey] || {};
+      const weekdayOffset = getWeekdayOffsetFromWeekStart(date);
+      const baseAvailableNames = allNames.filter((name) => !hardOffSet.has(name) && name !== cPerson);
+      let slack = Math.max(0, baseAvailableNames.length - (minA + minB));
+      const telafiCandidates = Object.keys(telafiWeekState)
+        .filter((name) => telafiWeekState[name] > 0 && !hardOffSet.has(name) && name !== cPerson)
+        .sort((left, right) => {
+          const leftPrimaryToday = (telafiWeekdayPairMap[left] || []).includes(weekdayOffset);
+          const rightPrimaryToday = (telafiWeekdayPairMap[right] || []).includes(weekdayOffset);
+          const leftMonthEndMustTake = telafiWeekState[left] >= getRemainingTelafiAvailabilityInMonth(date, left, cAssignments, nightRecoveryOff);
+          const rightMonthEndMustTake = telafiWeekState[right] >= getRemainingTelafiAvailabilityInMonth(date, right, cAssignments, nightRecoveryOff);
+          if (leftMonthEndMustTake !== rightMonthEndMustTake) return leftMonthEndMustTake ? -1 : 1;
+          const leftMustTake = telafiWeekState[left] >= getRemainingTelafiAvailability(date, left, cAssignments, nightRecoveryOff);
+          const rightMustTake = telafiWeekState[right] >= getRemainingTelafiAvailability(date, right, cAssignments, nightRecoveryOff);
+          if (leftMustTake !== rightMustTake) return leftMustTake ? -1 : 1;
+          if (leftPrimaryToday !== rightPrimaryToday) return leftPrimaryToday ? -1 : 1;
+          if (telafiWeekState[left] !== telafiWeekState[right]) return telafiWeekState[right] - telafiWeekState[left];
+          if (personStats[left].off !== personStats[right].off) return personStats[left].off - personStats[right].off;
+          return left.localeCompare(right, "tr");
+        });
+
+      telafiCandidates.forEach((name) => {
+        const primaryToday = (telafiWeekdayPairMap[name] || []).includes(weekdayOffset);
+        const monthEndMustTake = telafiWeekState[name] >= getRemainingTelafiAvailabilityInMonth(date, name, cAssignments, nightRecoveryOff);
+        const mustTake = telafiWeekState[name] >= getRemainingTelafiAvailability(date, name, cAssignments, nightRecoveryOff);
+        if (!monthEndMustTake && !mustTake && !primaryToday) return;
+        if (!monthEndMustTake && !mustTake && slack <= 0) return;
+        scheduledTelafi.push(name);
+        telafiWeekState[name] -= 1;
+        if (!monthEndMustTake && !mustTake) slack -= 1;
+      });
+    }
+    const softOffSet = new Set([
+      ...(isWeekend ? (weekendOff[dateKey] || []) : scheduledTelafi),
+      ...(yedekExtraOff[dateKey] || [])
+    ]);
     const leaveSet = new Set([...hardOffSet, ...softOffSet]);
     if (isWeekend && sef) leaveSet.add(sef.name);
     if (!isWeekend && cPerson === yedek.name) leaveSet.delete(yedek.name);
@@ -747,15 +1073,21 @@ function renderAll() {
     const availableNames = allNames.filter((name) => !leaveSet.has(name) && name !== cPerson);
     const workerNames = availableNames.filter((name) => !sef || name !== sef.name);
     const aCandidates = workerNames.filter((name) => {
+      const person = personnelMap[name];
       const lockedSide = getWeeklySide(weeklySideMap, weekKey, name);
-      return !lockedSide || lockedSide === "A";
+      if (lockedSide) return lockedSide === "A";
+      if (hasStrictWeeklySide(person)) return matchesPreferredSide(personnelMap, lastWorkedWeekSide, name, "A", weekKey, weekendOnlySideMap, telafiSideMap);
+      return matchesPreferredSide(personnelMap, lastWorkedWeekSide, name, "A", weekKey, weekendOnlySideMap, telafiSideMap);
     });
     const bCandidates = workerNames.filter((name) => {
+      const person = personnelMap[name];
       const lockedSide = getWeeklySide(weeklySideMap, weekKey, name);
-      return !lockedSide || lockedSide === "B";
+      if (lockedSide) return lockedSide === "B";
+      if (hasStrictWeeklySide(person)) return matchesPreferredSide(personnelMap, lastWorkedWeekSide, name, "B", weekKey, weekendOnlySideMap, telafiSideMap);
+      return matchesPreferredSide(personnelMap, lastWorkedWeekSide, name, "B", weekKey, weekendOnlySideMap, telafiSideMap);
     });
-    const sortedA = sortCandidates(aCandidates, "A", personStats, personIndex, weekSerial, isWeekend, personnelMap);
-    const sortedB = sortCandidates(bCandidates, "B", personStats, personIndex, weekSerial, isWeekend, personnelMap);
+    const sortedA = sortCandidates(aCandidates, "A", personStats, lastWorkedWeekSide, isWeekend, personnelMap, weekKey, weekendOnlySideMap, telafiSideMap);
+    const sortedB = sortCandidates(bCandidates, "B", personStats, lastWorkedWeekSide, isWeekend, personnelMap, weekKey, weekendOnlySideMap, telafiSideMap);
 
     let aPeople = [];
     let bPeople = [];
@@ -767,45 +1099,82 @@ function renderAll() {
       setWeeklySide(weeklySideMap, weekKey, sef.name, "A");
     }
 
+    let fillAGuard = 0;
     while (aPeople.length < minA) {
+      if (fillAGuard > allNames.length + 4) break;
+      fillAGuard += 1;
       const next = pickNextCandidate(sortedA, used);
       if (!next) break;
       aPeople.push(next);
       setWeeklySide(weeklySideMap, weekKey, next, "A");
+      rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "A");
     }
 
+    let fillBGuard = 0;
     while (bPeople.length < minB) {
+      if (fillBGuard > allNames.length + 4) break;
+      fillBGuard += 1;
       const next = pickNextCandidate(sortedB, used);
       if (!next) break;
       bPeople.push(next);
       setWeeklySide(weeklySideMap, weekKey, next, "B");
+      rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "B");
     }
 
     // Minimum kadroyu her zaman haftalik A/B kilidinin onune koy.
+    const fallbackAPool = workerNames.slice();
+    let fallbackAGuard = 0;
     while (aPeople.length < minA) {
-      const fallback = pickFallbackCandidate(workerNames, used);
+      if (fallbackAGuard > allNames.length + 4) break;
+      fallbackAGuard += 1;
+      const fallback = pickFallbackCandidate(fallbackAPool, used);
       if (!fallback) break;
+      if (hasStrictWeeklySide(personnelMap[fallback]) && !matchesPreferredSide(personnelMap, lastWorkedWeekSide, fallback, "A", weekKey, weekendOnlySideMap, telafiSideMap)) {
+        used.delete(fallback);
+        const poolIndex = fallbackAPool.indexOf(fallback);
+        if (poolIndex >= 0) fallbackAPool.splice(poolIndex, 1);
+        continue;
+      }
       aPeople.push(fallback);
       setWeeklySide(weeklySideMap, weekKey, fallback, "A");
+      rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, fallback, "A");
     }
 
+    const fallbackBPool = workerNames.slice();
+    let fallbackBGuard = 0;
     while (bPeople.length < minB) {
-      const fallback = pickFallbackCandidate(workerNames, used);
+      if (fallbackBGuard > allNames.length + 4) break;
+      fallbackBGuard += 1;
+      const fallback = pickFallbackCandidate(fallbackBPool, used);
       if (!fallback) break;
+      if (hasStrictWeeklySide(personnelMap[fallback]) && !matchesPreferredSide(personnelMap, lastWorkedWeekSide, fallback, "B", weekKey, weekendOnlySideMap, telafiSideMap)) {
+        used.delete(fallback);
+        const poolIndex = fallbackBPool.indexOf(fallback);
+        if (poolIndex >= 0) fallbackBPool.splice(poolIndex, 1);
+        continue;
+      }
       bPeople.push(fallback);
       setWeeklySide(weeklySideMap, weekKey, fallback, "B");
+      rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, fallback, "B");
     }
 
     const totalCapacity = maxA === null || maxB === null
       ? availableNames.length
       : (maxA + maxB);
 
+    let capacityGuard = 0;
     while ((aPeople.length + bPeople.length) < totalCapacity) {
+      if (capacityGuard > allNames.length * 4 + 10) break;
+      capacityGuard += 1;
       let side = null;
       const aHasRoom = maxA === null || aPeople.length < maxA;
       const bHasRoom = maxB === null || bPeople.length < maxB;
       if (!aHasRoom && !bHasRoom) break;
-      if (aHasRoom && !bHasRoom) side = "A";
+      if (isWeekend) {
+        if (aHasRoom && bHasRoom) side = aPeople.length <= bPeople.length ? "A" : "B";
+        else if (aHasRoom) side = "A";
+        else side = "B";
+      } else if (aHasRoom && !bHasRoom) side = "A";
       else if (!aHasRoom && bHasRoom) side = "B";
       else if (
         (maxA === null ? aPeople.length : (aPeople.length / maxA)) <=
@@ -813,7 +1182,9 @@ function renderAll() {
       ) side = "A";
       else side = "B";
 
-      let next = pickNextCandidate(side === "A" ? sortedA : sortedB, used);
+      let next = isWeekend
+        ? pickCandidateForWeekendBalance(side === "A" ? sortedA : sortedB, workerNames, used)
+        : pickNextCandidate(side === "A" ? sortedA : sortedB, used);
       if (!next) {
         const otherSide = side === "A" ? "B" : "A";
         const otherHasRoom = otherSide === "A"
@@ -821,45 +1192,53 @@ function renderAll() {
           : (maxB === null || bPeople.length < maxB);
         if (otherHasRoom) {
           side = otherSide;
-          next = pickNextCandidate(side === "A" ? sortedA : sortedB, used);
+          next = isWeekend
+            ? pickCandidateForWeekendBalance(side === "A" ? sortedA : sortedB, workerNames, used)
+            : pickNextCandidate(side === "A" ? sortedA : sortedB, used);
         }
       }
       if (!next) break;
+      if (hasStrictWeeklySide(personnelMap[next]) && !matchesPreferredSide(personnelMap, lastWorkedWeekSide, next, side, weekKey, weekendOnlySideMap, telafiSideMap)) {
+        used.delete(next);
+        const aIndex = sortedA.indexOf(next);
+        if (aIndex >= 0) sortedA.splice(aIndex, 1);
+        const bIndex = sortedB.indexOf(next);
+        if (bIndex >= 0) sortedB.splice(bIndex, 1);
+        continue;
+      }
 
       if (side === "A") {
         aPeople.push(next);
         setWeeklySide(weeklySideMap, weekKey, next, "A");
+        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "A");
       } else {
         bPeople.push(next);
         setWeeklySide(weeklySideMap, weekKey, next, "B");
+        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "B");
       }
     }
 
-    // Izinli olmayan kimse kapasite varken bos kalmasin.
+    // Izinli olmayan kimse bos kalmasin: ya vardiyada olur ya da gercekten izinlidir.
     let remainingAvailable = availableNames.filter((name) => !used.has(name));
+    let remainingGuard = 0;
     while (remainingAvailable.length) {
-      const aHasRoom = maxA === null || aPeople.length < maxA;
-      const bHasRoom = maxB === null || bPeople.length < maxB;
-      if (!aHasRoom && !bHasRoom) break;
-
+      if (remainingGuard > allNames.length * 2 + 4) break;
+      remainingGuard += 1;
       const next = remainingAvailable.shift();
       if (!next) break;
       used.add(next);
+      const person = personnelMap[next];
 
-      if (aHasRoom && bHasRoom) {
-        if (aPeople.length <= bPeople.length) {
-          aPeople.push(next);
-          setWeeklySide(weeklySideMap, weekKey, next, "A");
-        } else {
-          bPeople.push(next);
-          setWeeklySide(weeklySideMap, weekKey, next, "B");
-        }
-      } else if (aHasRoom) {
+      const preferredSide = getPreferredSide(person, lastWorkedWeekSide, next, weekKey, weekendOnlySideMap, telafiSideMap);
+
+      if (preferredSide === "A" || (!preferredSide && aPeople.length <= bPeople.length)) {
         aPeople.push(next);
         setWeeklySide(weeklySideMap, weekKey, next, "A");
+        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "A");
       } else {
         bPeople.push(next);
         setWeeklySide(weeklySideMap, weekKey, next, "B");
+        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "B");
       }
     }
 
@@ -871,19 +1250,37 @@ function renderAll() {
     let extraOffList = [];
     let offList = plannedOffList.slice();
 
-    dailyPlans.push({
-      d,
-      day,
-      isWeekend,
-      holidayLabel,
-      weekKey,
-      aPeople: aPeople.slice(),
-      bPeople: bPeople.slice(),
-      cPerson,
-      plannedOffList: plannedOffList.slice(),
-      extraOffList: extraOffList.slice(),
-      offList: offList.slice()
+    if (isSameMonth(planDate, y, m)) {
+      dailyPlans.push({
+        d,
+        day,
+        isWeekend,
+        holidayLabel,
+        weekKey,
+        aPeople: aPeople.slice(),
+        bPeople: bPeople.slice(),
+        cPerson,
+        plannedOffList: plannedOffList.slice(),
+        extraOffList: extraOffList.slice(),
+        offList: offList.slice()
+      });
+    }
+
+    assignedNames.forEach((name) => {
+      personStats[name].work += 1;
+      if (isWeekend) personStats[name].weekendWork += 1;
     });
+    offList.forEach((name) => {
+      personStats[name].off += 1;
+      if (isWeekend) personStats[name].weekendOff += 1;
+    });
+    aPeople.forEach((name) => {
+      if (name !== "Eksik") personStats[name].a += 1;
+    });
+    bPeople.forEach((name) => {
+      if (name !== "Eksik") personStats[name].b += 1;
+    });
+    if (cPerson !== "Eksik" && personStats[cPerson]) personStats[cPerson].c += 1;
   }
 
   rebalanceComparableGroups(dailyPlans, personnelMap);
@@ -893,7 +1290,12 @@ function renderAll() {
   }
 
   dailyPlans.forEach((plan) => {
+    const visibleAPeople = plan.aPeople.filter((name) => name !== "Eksik" && visibleNames.has(name));
+    const visibleBPeople = plan.bPeople.filter((name) => name !== "Eksik" && visibleNames.has(name));
+    const visibleCPeople = plan.cPerson !== "Eksik" && visibleNames.has(plan.cPerson) ? [plan.cPerson] : [];
+    const visibleOffList = plan.offList.filter((name) => visibleNames.has(name));
     const assignedNames = new Set([...plan.aPeople, ...plan.bPeople, plan.cPerson].filter((name) => name && name !== "Eksik"));
+    const visibleAssignedNames = new Set([...visibleAPeople, ...visibleBPeople, ...visibleCPeople]);
     totalA += plan.aPeople.filter((name) => name !== "Eksik").length;
     totalB += plan.bPeople.filter((name) => name !== "Eksik").length;
     totalC += 1;
@@ -901,45 +1303,44 @@ function renderAll() {
     if (plan.isWeekend) weekendCount += 1;
 
     assignedNames.forEach((name) => {
-      personStats[name].work += 1;
-      if (plan.isWeekend) personStats[name].weekendWork += 1;
       if (personHours[name] !== undefined) personHours[name] += 8;
       if (personDayStatus[name]) personDayStatus[name].push("work");
     });
     plan.offList.forEach((name) => {
-      personStats[name].off += 1;
-      if (plan.isWeekend) personStats[name].weekendOff += 1;
       if (personOffDays[name] !== undefined) personOffDays[name] += 1;
       if (personDayStatus[name]) personDayStatus[name].push("off");
     });
-    plan.aPeople.forEach((name) => {
-      if (name !== "Eksik") personStats[name].a += 1;
-    });
-    plan.bPeople.forEach((name) => {
-      if (name !== "Eksik") personStats[name].b += 1;
-    });
-    if (plan.cPerson !== "Eksik" && personStats[plan.cPerson]) personStats[plan.cPerson].c += 1;
 
     const card = document.createElement("div");
     card.className = "day";
     if (plan.isWeekend) card.classList.add("weekend-day");
+    const isEmptyForFilter = filterHasSelection && !visibleAPeople.length && !visibleBPeople.length && !visibleCPeople.length && !visibleOffList.length;
     if (selectedPersonName) {
-      if (assignedNames.has(selectedPersonName)) card.classList.add("focus-work");
-      else if (plan.offList.includes(selectedPersonName)) card.classList.add("focus-off");
-      else card.classList.add("filtered-out");
+      if (visibleAssignedNames.has(selectedPersonName)) card.classList.add("focus-work");
+      else if (visibleOffList.includes(selectedPersonName)) card.classList.add("focus-off");
+    } else if (isEmptyForFilter) {
+      card.classList.add("filter-empty");
+      card.innerHTML = [
+        '<div class="d">' + plan.d + ' - ' + dayNameTr(plan.day) + '</div>',
+        (plan.holidayLabel ? '<div class="holiday-note">' + escapeHtml(plan.holidayLabel) + '</div>' : ''),
+        '<div class="filter-empty-note">-</div>'
+      ].join("");
+      calendarEl.appendChild(card);
+      printWeekCells.push('<td class="' + (plan.isWeekend ? "weekend-cell" : "") + '">' + card.outerHTML + "</td>");
+      return;
     }
-    card.innerHTML = [
-      '<div class="d">' + plan.d + ' - ' + dayNameTr(plan.day) + '</div>',
-      (plan.holidayLabel ? '<div class="holiday-note">' + escapeHtml(plan.holidayLabel) + '</div>' : ''),
-      '<div class="row a">A (08-16): ' + plan.aPeople.filter((name) => name !== "Eksik").length + ' kisi</div>',
-      '<div class="names a-names">' + renderNameList(plan.aPeople, selectedPersonName, "work") + '</div>',
-      '<div class="row b">B (16-00): ' + plan.bPeople.filter((name) => name !== "Eksik").length + ' kisi</div>',
-      '<div class="names b-names">' + renderNameList(plan.bPeople, selectedPersonName, "work") + '</div>',
-      '<div class="row c">C (00-08): 1 kisi</div>',
-      '<div class="names c-names">' + renderNameList([plan.cPerson], selectedPersonName, "work") + '</div>',
-      '<div class="row off">Izinliler: ' + plan.offList.length + '</div>',
-      '<div class="names off-names">' + renderNameList(plan.offList, selectedPersonName, "off") + '</div>'
-    ].join("");
+      card.innerHTML = [
+        '<div class="d">' + plan.d + ' - ' + dayNameTr(plan.day) + '</div>',
+        (plan.holidayLabel ? '<div class="holiday-note">' + escapeHtml(plan.holidayLabel) + '</div>' : ''),
+        '<div class="row a">A (08-16): ' + visibleAPeople.length + ' kisi</div>',
+        '<div class="names a-names">' + renderNameList(visibleAPeople, selectedPersonName, "work") + '</div>',
+        '<div class="row b">B (16-00): ' + visibleBPeople.length + ' kisi</div>',
+        '<div class="names b-names">' + renderNameList(visibleBPeople, selectedPersonName, "work") + '</div>',
+        '<div class="row c">C (00-08): ' + visibleCPeople.length + ' kisi</div>',
+        '<div class="names c-names">' + renderNameList(visibleCPeople, selectedPersonName, "work") + '</div>',
+        '<div class="row off">Izinliler: ' + visibleOffList.length + '</div>',
+        '<div class="names off-names">' + renderNameList(visibleOffList, selectedPersonName, "off") + '</div>'
+      ].join("");
     calendarEl.appendChild(card);
     printWeekCells.push('<td class="' + (plan.isWeekend ? "weekend-cell" : "") + '">' + card.outerHTML + "</td>");
 
@@ -1020,23 +1421,54 @@ function renderAll() {
   }
 }
 
-savePersonBtn.addEventListener("click", upsertPerson);
-personToggleBtn.addEventListener("click", () => {
-  personSectionBody.classList.toggle("collapsed");
-});
-rulesToggleBtn.addEventListener("click", () => {
-  rulesSectionBody.classList.toggle("collapsed");
-});
-exportBtn.addEventListener("click", exportToExcel);
-pdfBtn.addEventListener("click", exportToPdf);
-clearFocusBtn.addEventListener("click", clearSelectedPerson);
+if (savePersonBtn) savePersonBtn.addEventListener("click", upsertPerson);
+if (personToggleBtn && personSectionBody) {
+  personToggleBtn.addEventListener("click", () => {
+    personSectionBody.classList.toggle("collapsed");
+  });
+}
+if (rulesToggleBtn && rulesSectionBody) {
+  rulesToggleBtn.addEventListener("click", () => {
+    rulesSectionBody.classList.toggle("collapsed");
+  });
+}
+if (exportBtn) exportBtn.addEventListener("click", exportToExcel);
+if (pdfBtn) pdfBtn.addEventListener("click", exportToPdf);
+if (clearFocusBtn) clearFocusBtn.addEventListener("click", clearSelectedPerson);
+if (yearDownBtn) yearDownBtn.addEventListener("click", () => adjustYearMonth(-1, 0));
+if (yearUpBtn) yearUpBtn.addEventListener("click", () => adjustYearMonth(1, 0));
+if (monthDownBtn) monthDownBtn.addEventListener("click", () => adjustYearMonth(0, -1));
+if (monthUpBtn) monthUpBtn.addEventListener("click", () => adjustYearMonth(0, 1));
 
 [yearEl, monthEl].forEach((el) => {
+  if (!el) return;
   el.addEventListener("change", () => {
     saveState();
     renderAll();
   });
 });
 
-loadState();
-renderAll();
+if (leaveModeFilterEl) {
+  leaveModeFilterEl.addEventListener("change", () => {
+    renderAll();
+  });
+}
+
+function bootstrapApp() {
+  ensureBootstrapDefaults();
+  try {
+    loadState();
+    ensureBootstrapDefaults();
+    renderAll();
+  } catch (err) {
+    console.error("Uygulama varsayilan durumla yeniden baslatiliyor:", err);
+    state = getDefaultState();
+    if (yearEl) yearEl.value = String(state.year);
+    if (monthEl) monthEl.value = String(state.month);
+    if (leaveModeFilterEl) leaveModeFilterEl.value = "all";
+    saveState();
+    renderAll();
+  }
+}
+
+bootstrapApp();
