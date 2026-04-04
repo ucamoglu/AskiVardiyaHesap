@@ -758,6 +758,11 @@ function buildWeekendOnlySideMap(personnel, startDate, endDate, weekendOff) {
     personnel.filter((person) => person.type === "normal" && person.leaveMode === "weekend_only")
   );
   const sideMap = {};
+  const currentSideByPerson = {};
+
+  weekendOnlyPeople.forEach((person, index) => {
+    currentSideByPerson[person.name] = index % 2 === 0 ? "A" : "B";
+  });
 
   for (let weekStart = new Date(startOfWeek(startDate)); weekStart <= endDate; weekStart.setDate(weekStart.getDate() + 7)) {
     const saturday = new Date(weekStart);
@@ -770,7 +775,10 @@ function buildWeekendOnlySideMap(personnel, startDate, endDate, weekendOff) {
 
     weekendOnlyPeople.forEach((person) => {
       const hasWeekendOff = saturdayOff.has(person.name) || sundayOff.has(person.name);
-      sideMap[`${weekKey}|${person.name}`] = hasWeekendOff ? "B" : "A";
+      sideMap[`${weekKey}|${person.name}`] = currentSideByPerson[person.name] || "A";
+      if (hasWeekendOff) {
+        currentSideByPerson[person.name] = currentSideByPerson[person.name] === "A" ? "B" : "A";
+      }
     });
   }
 
@@ -1076,6 +1084,10 @@ function renderAll() {
       const person = personnelMap[name];
       const lockedSide = getWeeklySide(weeklySideMap, weekKey, name);
       if (lockedSide) return lockedSide === "A";
+      if (isWeekend && person?.leaveMode === "weekend_only") {
+        return matchesPreferredSide(personnelMap, lastWorkedWeekSide, name, "A", weekKey, weekendOnlySideMap, telafiSideMap);
+      }
+      if (isWeekend) return true;
       if (hasStrictWeeklySide(person)) return matchesPreferredSide(personnelMap, lastWorkedWeekSide, name, "A", weekKey, weekendOnlySideMap, telafiSideMap);
       return matchesPreferredSide(personnelMap, lastWorkedWeekSide, name, "A", weekKey, weekendOnlySideMap, telafiSideMap);
     });
@@ -1083,6 +1095,10 @@ function renderAll() {
       const person = personnelMap[name];
       const lockedSide = getWeeklySide(weeklySideMap, weekKey, name);
       if (lockedSide) return lockedSide === "B";
+      if (isWeekend && person?.leaveMode === "weekend_only") {
+        return matchesPreferredSide(personnelMap, lastWorkedWeekSide, name, "B", weekKey, weekendOnlySideMap, telafiSideMap);
+      }
+      if (isWeekend) return true;
       if (hasStrictWeeklySide(person)) return matchesPreferredSide(personnelMap, lastWorkedWeekSide, name, "B", weekKey, weekendOnlySideMap, telafiSideMap);
       return matchesPreferredSide(personnelMap, lastWorkedWeekSide, name, "B", weekKey, weekendOnlySideMap, telafiSideMap);
     });
@@ -1106,8 +1122,10 @@ function renderAll() {
       const next = pickNextCandidate(sortedA, used);
       if (!next) break;
       aPeople.push(next);
-      setWeeklySide(weeklySideMap, weekKey, next, "A");
-      rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "A");
+      if (!isWeekend) {
+        setWeeklySide(weeklySideMap, weekKey, next, "A");
+        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "A");
+      }
     }
 
     let fillBGuard = 0;
@@ -1117,8 +1135,10 @@ function renderAll() {
       const next = pickNextCandidate(sortedB, used);
       if (!next) break;
       bPeople.push(next);
-      setWeeklySide(weeklySideMap, weekKey, next, "B");
-      rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "B");
+      if (!isWeekend) {
+        setWeeklySide(weeklySideMap, weekKey, next, "B");
+        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "B");
+      }
     }
 
     // Minimum kadroyu her zaman haftalik A/B kilidinin onune koy.
@@ -1129,15 +1149,19 @@ function renderAll() {
       fallbackAGuard += 1;
       const fallback = pickFallbackCandidate(fallbackAPool, used);
       if (!fallback) break;
-      if (hasStrictWeeklySide(personnelMap[fallback]) && !matchesPreferredSide(personnelMap, lastWorkedWeekSide, fallback, "A", weekKey, weekendOnlySideMap, telafiSideMap)) {
+      const fallbackLockedSide = getWeeklySide(weeklySideMap, weekKey, fallback);
+      const mustRespectWeekendSide = isWeekend && (fallbackLockedSide || personnelMap[fallback]?.leaveMode === "weekend_only");
+      if ((!isWeekend || mustRespectWeekendSide) && hasStrictWeeklySide(personnelMap[fallback]) && !matchesPreferredSide(personnelMap, lastWorkedWeekSide, fallback, "A", weekKey, weekendOnlySideMap, telafiSideMap)) {
         used.delete(fallback);
         const poolIndex = fallbackAPool.indexOf(fallback);
         if (poolIndex >= 0) fallbackAPool.splice(poolIndex, 1);
         continue;
       }
       aPeople.push(fallback);
-      setWeeklySide(weeklySideMap, weekKey, fallback, "A");
-      rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, fallback, "A");
+      if (!isWeekend) {
+        setWeeklySide(weeklySideMap, weekKey, fallback, "A");
+        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, fallback, "A");
+      }
     }
 
     const fallbackBPool = workerNames.slice();
@@ -1147,15 +1171,19 @@ function renderAll() {
       fallbackBGuard += 1;
       const fallback = pickFallbackCandidate(fallbackBPool, used);
       if (!fallback) break;
-      if (hasStrictWeeklySide(personnelMap[fallback]) && !matchesPreferredSide(personnelMap, lastWorkedWeekSide, fallback, "B", weekKey, weekendOnlySideMap, telafiSideMap)) {
+      const fallbackLockedSide = getWeeklySide(weeklySideMap, weekKey, fallback);
+      const mustRespectWeekendSide = isWeekend && (fallbackLockedSide || personnelMap[fallback]?.leaveMode === "weekend_only");
+      if ((!isWeekend || mustRespectWeekendSide) && hasStrictWeeklySide(personnelMap[fallback]) && !matchesPreferredSide(personnelMap, lastWorkedWeekSide, fallback, "B", weekKey, weekendOnlySideMap, telafiSideMap)) {
         used.delete(fallback);
         const poolIndex = fallbackBPool.indexOf(fallback);
         if (poolIndex >= 0) fallbackBPool.splice(poolIndex, 1);
         continue;
       }
       bPeople.push(fallback);
-      setWeeklySide(weeklySideMap, weekKey, fallback, "B");
-      rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, fallback, "B");
+      if (!isWeekend) {
+        setWeeklySide(weeklySideMap, weekKey, fallback, "B");
+        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, fallback, "B");
+      }
     }
 
     const totalCapacity = maxA === null || maxB === null
@@ -1198,7 +1226,9 @@ function renderAll() {
         }
       }
       if (!next) break;
-      if (hasStrictWeeklySide(personnelMap[next]) && !matchesPreferredSide(personnelMap, lastWorkedWeekSide, next, side, weekKey, weekendOnlySideMap, telafiSideMap)) {
+      const nextLockedSide = getWeeklySide(weeklySideMap, weekKey, next);
+      const mustRespectWeekendSide = isWeekend && (nextLockedSide || personnelMap[next]?.leaveMode === "weekend_only");
+      if ((!isWeekend || mustRespectWeekendSide) && hasStrictWeeklySide(personnelMap[next]) && !matchesPreferredSide(personnelMap, lastWorkedWeekSide, next, side, weekKey, weekendOnlySideMap, telafiSideMap)) {
         used.delete(next);
         const aIndex = sortedA.indexOf(next);
         if (aIndex >= 0) sortedA.splice(aIndex, 1);
@@ -1209,12 +1239,16 @@ function renderAll() {
 
       if (side === "A") {
         aPeople.push(next);
-        setWeeklySide(weeklySideMap, weekKey, next, "A");
-        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "A");
+        if (!isWeekend) {
+          setWeeklySide(weeklySideMap, weekKey, next, "A");
+          rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "A");
+        }
       } else {
         bPeople.push(next);
-        setWeeklySide(weeklySideMap, weekKey, next, "B");
-        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "B");
+        if (!isWeekend) {
+          setWeeklySide(weeklySideMap, weekKey, next, "B");
+          rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "B");
+        }
       }
     }
 
@@ -1233,12 +1267,16 @@ function renderAll() {
 
       if (preferredSide === "A" || (!preferredSide && aPeople.length <= bPeople.length)) {
         aPeople.push(next);
-        setWeeklySide(weeklySideMap, weekKey, next, "A");
-        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "A");
+        if (!isWeekend) {
+          setWeeklySide(weeklySideMap, weekKey, next, "A");
+          rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "A");
+        }
       } else {
         bPeople.push(next);
-        setWeeklySide(weeklySideMap, weekKey, next, "B");
-        rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "B");
+        if (!isWeekend) {
+          setWeeklySide(weeklySideMap, weekKey, next, "B");
+          rememberWorkedWeekSide(lastWorkedWeekSide, personnelMap, next, "B");
+        }
       }
     }
 
